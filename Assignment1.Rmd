@@ -9,3 +9,220 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+```{r}
+library(tidyverse)
+
+years <- 2017:2021
+quarters <- 1:4
+type <- "Electric"
+
+pge_17_21_Electric <- NULL
+
+for(quarter in quarters) {
+  for(year in years){
+    filename <-
+      paste0(
+        "PGE_",
+        year,
+        "_Q",
+        quarter,
+        "_",
+        type,
+        "UsageByZip.csv"
+      )
+    print(filename)
+    temp <- read_csv(filename)
+    pge_17_21_Electric <- rbind(pge_17_21_Electric,temp)
+    # Note rbind requires field names to be consistent for every new thing that you add.
+    saveRDS(pge_17_21_Electric, "pge_17_21_Electric.rds")
+  }}
+
+```
+
+```{r}
+
+years <- 2017:2021
+quarters <- 1:4
+type <- "Gas"
+
+pge_17_21_Gas <- NULL
+
+for(quarter in quarters) {
+  for(year in years){
+    filename <-
+      paste0(
+        "PGE_",
+        year,
+        "_Q",
+        quarter,
+        "_",
+        type,
+        "UsageByZip.csv"
+      )
+    print(filename)
+    temp <- read_csv(filename)
+    pge_17_21_Gas <- rbind(pge_17_21_Gas,temp)
+    # Note rbind requires field names to be consistent for every new thing that you add.
+    saveRDS(pge_17_21_Gas, "pge_17_21_Gas.rds")
+}}
+```
+
+```{r}
+library(tidyverse)
+library(zoo)
+
+pge_elec_filter <- filter(pge_17_21_Electric, CUSTOMERCLASS %in% c("Elec- Residential","Elec- Commercial"))
+
+pge_gas_filter <- filter(pge_17_21_Gas, CUSTOMERCLASS %in% c("Gas- Residential","Gas- Commercial"))
+
+pge_elec_filter["kBTUs"] <- pge_elec_filter$TOTALKWH * 3412.14/1000
+#Conversion from KWH to kBTUs
+
+pge_gas_filter["kBTUs"] <- pge_gas_filter$TOTALTHM * 99976.1/1000
+#Conversion from THERM to kBTUs
+
+pge_elec_select <-
+  select(
+    pge_elec_filter,
+    -c(COMBINED, AVERAGEKWH, TOTALKWH, AVERAGEKWH)
+  )
+pge_gas_select <-
+  select(
+    pge_gas_filter,
+    -c(COMBINED, AVERAGETHM, TOTALTHM, AVERAGETHM)
+  )
+
+pge_gas_elec_bound <- 
+  rbind(
+    pge_gas_select, pge_elec_select)
+
+pge_gas_elec_bound["Date"] <- "0"
+pge_gas_elec_bound$Date <- as.yearmon(paste(pge_gas_elec_bound$YEAR, pge_gas_elec_bound$MONTH), "%Y %m")
+
+pge_res_bound <- filter(pge_gas_elec_bound, CUSTOMERCLASS %in% c("Gas- Residential","Elec- Residential"))
+pge_comm_bound <- filter(pge_gas_elec_bound, CUSTOMERCLASS %in% c("Elec- Commercial","Gas- Commercial"))
+```
+
+
+```{r}
+library(tidyverse)
+library(plotly)
+library(lubridate)
+
+pge_res_chart <-
+  pge_res_bound %>%
+  ggplot() +
+  geom_bar(
+    aes(
+      x = Date %>% factor(),
+      y = kBTUs,
+      fill = CUSTOMERCLASS
+    ),
+    stat = "identity",
+    position = "stack"
+  ) +
+  theme(axis.text.x = element_text(angle = 90))+
+  labs(
+    x = "Month",
+    y = "kBTUs",
+    title = "PG&E Territory Residential Energy Usage, 2017-2021",
+    fill = "Electricity Type"
+)
+    pge_res_chart
+```
+
+```{r}
+library(tidyverse)
+library(plotly)
+library(lubridate)
+
+pge_comm_chart <-
+  pge_comm_bound %>%
+  ggplot() +
+  geom_bar(
+    aes(
+      x = Date %>% factor(),
+      y = kBTUs,
+      fill = CUSTOMERCLASS
+    ),
+    stat = "identity",
+    position = "stack"
+  ) +
+  theme(axis.text.x = element_text(angle = 90))+
+  labs(
+    x = "Month",
+    y = "kBTUs",
+    title = "PG&E Territory Commercial Energy Usage, 2017-2021",
+    fill = "Electricity Type"
+)
+    pge_comm_chart
+```
+```
+## Comment on any observable changes in evergy consumption that may be attributable to the COVID-19 Pandemic
+
+##Tried to do this in plotly, but it returned an error 
+# ```{r}
+# library(plotly)
+# 
+# plot_ly() %>% 
+#   add_trace(
+#     data = pge_gas_elec_bound %>% filter(CUSTOMERCLASS == "Elec- Residential"),
+#     x = ~MONTH %>% factor(),
+#     y = ~kBTUs,
+#     type = "bar",
+#     name = "Residential Electricity"
+#   ) %>% 
+#   add_trace(
+#     data = pge_gas_elec_bound %>% filter(CUSTOMERCLASS == "Gas- Residential"),
+#     x = ~MONTH %>% factor(),
+#     y = ~kBTUs,
+#     type = "bar",
+#     name = "Residential Gas"
+#   ) %>% 
+#   layout(
+#     xaxis = list(
+#       title = "Month",
+#       fixedrange = T
+#     ),
+#     yaxis = list(
+#       title = "kBTU",
+#       fixedrange = T
+#     ),
+#     barmode = "stack",
+#     legend = list(title = list(text = "Residential Energy Type"))
+#   ) %>% 
+#   config(displayModeBar = F)
+# 
+# plot_ly() %>% 
+#   add_trace(
+#     data = pge_gas_elec_bound %>% filter(CUSTOMERCLASS == "Elec- Commerical"),
+#     x = ~MONTH %>% factor(),
+#     y = ~kBTUs,
+#     type = "bar",
+#     name = "Commercial"
+#   ) %>% 
+#   add_trace(
+#     data = pge_gas_elec_bound %>% filter(CUSTOMERCLASS == "Gas- Commercial"),
+#     x = ~MONTH %>% factor(),
+#     y = ~kBTUs,
+#     type = "bar",
+#     name = "Residential"
+#   ) %>% 
+#   layout(
+#     xaxis = list(
+#       title = "Month",
+#       fixedrange = T
+#     ),
+#     yaxis = list(
+#       title = "kBTU",
+#       fixedrange = T
+#     ),
+#     barmode = "stack",
+#     legend = list(title = list(text = "Commercial Energy Type"))
+#   ) %>% 
+#   config(displayModeBar = F)
+# ```
+
+
+
+
