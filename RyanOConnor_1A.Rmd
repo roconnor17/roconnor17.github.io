@@ -11,7 +11,7 @@ knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
 
 ```{r, error = T}
 library(tidyverse)
-
+##nested for loop that iterates through all combinations of Year_Qn for Electric
 years <- 2017:2021
 quarters <- 1:4
 type <- "Electric"
@@ -38,7 +38,7 @@ for(quarter in quarters) {
   }}
 
 ```
-
+The above error is expected and tolerated because of the lack of 2021_Q3 and 2021_Q4 CSVs. This error is remedied in the knitr process by annotating the beginning of the for loop chunks with {r, error = T} to instruct the knirt process to ignore the error. 
 ```{r, error = T}
 
 years <- 2017:2021
@@ -46,6 +46,7 @@ quarters <- 1:4
 type <- "Gas"
 
 pge_17_21_Gas <- NULL
+##nested for loop that iterates through all combinations of Year_Qn for Electric
 
 for(quarter in quarters) {
   for(year in years){
@@ -66,20 +67,22 @@ for(quarter in quarters) {
     saveRDS(pge_17_21_Gas, "pge_17_21_Gas.rds")
 }}
 ```
-
+The above error is expected and tolerated because of the lack of 2021_Q3 and 2021_Q4 CSVs. This error is remedied in the knitr process by annotating the beginning of the for loop chunks with {r, error = T} to instruct the knirt process to ignore the error. 
 ```{r}
 library(tidyverse)
 library(zoo)
 
 pge_elec_filter <- filter(pge_17_21_Electric, CUSTOMERCLASS %in% c("Elec- Residential","Elec- Commercial"))
+#Creating an object with only Residential and Commercial Electrical data from the bound object containing all Electric data from 17-12
 
 pge_gas_filter <- filter(pge_17_21_Gas, CUSTOMERCLASS %in% c("Gas- Residential","Gas- Commercial"))
+#Same as above for gas data
 
 pge_elec_filter["kBTUs"] <- pge_elec_filter$TOTALKWH * 3412.14/1000
-#Conversion from KWH to kBTUs
+#Conversion from KWH to kBTUs and creating an additional field for kBTUs
 
 pge_gas_filter["kBTUs"] <- pge_gas_filter$TOTALTHM * 99976.1/1000
-#Conversion from THERM to kBTUs
+#Conversion from THERM to kBTUs and creating an additional field for kBTUs
 
 pge_elec_select <-
   select(
@@ -91,16 +94,19 @@ pge_gas_select <-
     pge_gas_filter,
     -c(COMBINED, AVERAGETHM, TOTALTHM, AVERAGETHM)
   )
-
+#Removing irrelevant fields so that gas and electric have a similar scheme and can be bound
 pge_gas_elec_bound <- 
   rbind(
     pge_gas_select, pge_elec_select)
+#Binding gas and electric together, now that the field schema match
 
 pge_gas_elec_bound["Date"] <- "0"
 pge_gas_elec_bound$Date <- as.yearmon(paste(pge_gas_elec_bound$YEAR, pge_gas_elec_bound$MONTH), "%Y %m")
+#Inserting a Date field that is correctly formatted as a date-type so that the x-axis can represent all months and years together in order. Unsure if ggplot has a way to do this, but I used as.yearmon in the Zoo package, which seemed to work just fine
 
 pge_res_bound <- filter(pge_gas_elec_bound, CUSTOMERCLASS %in% c("Gas- Residential","Elec- Residential"))
 pge_comm_bound <- filter(pge_gas_elec_bound, CUSTOMERCLASS %in% c("Elec- Commercial","Gas- Commercial"))
+#Filtering so that residential and commercial get their own objects and can be easily visualized independently 
 ```
 
 
@@ -121,7 +127,7 @@ pge_res_chart <-
     stat = "identity",
     position = "stack"
   ) +
-  theme(axis.text.x = element_text(angle = 90))+
+  theme(axis.text.x = element_text(angle = 75))+
   labs(
     x = "Month",
     y = "kBTUs",
@@ -129,6 +135,7 @@ pge_res_chart <-
     fill = "Electricity Type"
 )
     pge_res_chart
+#added a theme to the x-axis to angle the text of the axis labels at 75 deg
 ```
 
 ```{r}
@@ -148,7 +155,7 @@ pge_comm_chart <-
     stat = "identity",
     position = "stack"
   ) +
-  theme(axis.text.x = element_text(angle = 90))+
+  theme(axis.text.x = element_text(angle = 75))+
   labs(
     x = "Month",
     y = "kBTUs",
@@ -187,7 +194,7 @@ pge_res19_20_21_chart <-
     stat = "identity",
     position = "stack"
   ) +
-  theme(axis.text.x = element_text(angle = 90))+
+  theme(axis.text.x = element_text(angle = 75))+
   labs(
     x = "Month",
     y = "kBTUs",
