@@ -6,10 +6,10 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
 ```
 
-```{r}
+```{r, error = T}
 library(tidyverse)
 
 years <- 2017:2021
@@ -39,7 +39,7 @@ for(quarter in quarters) {
 
 ```
 
-```{r}
+```{r, error = T}
 
 years <- 2017:2021
 quarters <- 1:4
