@@ -157,8 +157,68 @@ pge_comm_chart <-
 )
     pge_comm_chart
 ```
+
+Comment on any observable changes in evergy consumption that may be attributable to the COVID-19 Pandemic:
+  
+  When looking at the PG&E territorial residential energy use, there is very little appreciable difference between the Pre-Covid (2019) and COVID (2020-21) states in terms of gas energy consumpiton, and only a minor increase in home electricity useage during the Summer of 2020 as compared to the summer of 2019. However, there is a very noticable decline in the energy consumption in the commercial sector in the Spring and Summer of 2020 as compared to 2019, followed by an increase in the Spring and Summer of 2021 above even the "normal" pre-COVID levels of 2019 and prior.The decline in commercial energy consumption in 2020 is intuitively linked to the reduced commercial mobility of society. However, the increase in 2021 is surprising, considering the lingering restrictions in the Bay Area due to COVID, as well as the increase above Pre-COVID levels. One potential explanation for this is a "catch-up," with both consumers and businesses making up for lost time and seeking to engage in more social activity follow the COVID "burnout." What is interesting and notable is that, while intutitvely the proportion of time spent at home increased in 2020, the gross demand of residential energy did not increase significantly, but largely remained the same. This seems to indicate that staying at home more does not necessarily equate to using more energy at home.
+  
+  Key assumptions that have been made in this analysis of 2019 vs 2020/2021 include the assumption that energy consumption is driven by social mobility of people and the resulting commercial/residential balance of people's time and energy demand. What this analysis does not account for is the potential climactic demand for energy (i.e. if it is warmer in the summer or colder in the winter, there will be greater demand in ebergy) or economic ability to consume energy (i.e. the need to limit energy consumption due to reduced income). Below I've generated 2 plots displaying a zoomed-in view of these energy demand trends, specific to the time period from Jan 2019-Jul 2021
+  
+```{r}
+library(tidyverse)
+library(plotly)
+library(lubridate)
+
+pge_19_20_21_res_bound <- filter(
+pge_res_bound, YEAR %in% c("2019","2020","2021"))
+
+pge_19_20_21_comm_bound <- filter(
+pge_comm_bound, YEAR %in% c("2019","2020","2021"))
+
+pge_res19_20_21_chart <-
+  pge_19_20_21_res_bound %>%
+  ggplot() +
+  geom_bar(
+    aes(
+      x = Date %>% factor(),
+      y = kBTUs,
+      fill = CUSTOMERCLASS
+    ),
+    stat = "identity",
+    position = "stack"
+  ) +
+  theme(axis.text.x = element_text(angle = 90))+
+  labs(
+    x = "Month",
+    y = "kBTUs",
+    title = "PG&E Territory Residential Energy Usage, 2019-2021",
+    fill = "Electricity Type"
+)
+
+pge_comm19_20_21_chart <-
+  pge_19_20_21_comm_bound %>%
+  ggplot() +
+  geom_bar(
+    aes(
+      x = Date %>% factor(),
+      y = kBTUs,
+      fill = CUSTOMERCLASS
+    ),
+    stat = "identity",
+    position = "stack"
+  ) +
+  theme(axis.text.x = element_text(angle = 90))+
+  labs(
+    x = "Month",
+    y = "kBTUs",
+    title = "PG&E Commercial Residential Energy Usage, 2019-2021",
+    fill = "Electricity Type"
+)
+    
+    pge_comm19_20_21_chart
+    pge_res19_20_21_chart
 ```
-## Comment on any observable changes in evergy consumption that may be attributable to the COVID-19 Pandemic
+
 
 ##Tried to do this in plotly, but it returned an error 
 # ```{r}
