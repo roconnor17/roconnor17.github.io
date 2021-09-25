@@ -9,9 +9,9 @@ output: html_document
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 ```
 
-```{r, error = T, echo=F}
+```{r, error = T}
 library(tidyverse)
-##nested for loop that iterates through all combinations of Year_Qn for Electric
+##nested for loop that iterates through all combinations of Year_Q for Electric
 years <- 2017:2021
 quarters <- 1:4
 type <- "Electric"
