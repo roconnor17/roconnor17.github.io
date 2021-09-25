@@ -139,7 +139,7 @@ pge_res_chart <-
     title = "PG&E Territory Residential Energy Usage, 2017-2021",
     fill = "Electricity Type"
 )
-pge_res_chart %>% ggplotly()
+pge_res_chart
 #added a theme to the x-axis to angle the text of the axis labels at 75 deg
 ```
 
@@ -167,7 +167,7 @@ pge_comm_chart <-
     title = "PG&E Territory Commercial Energy Usage, 2017-2021",
     fill = "Electricity Type"
 )
-pge_comm_chart %>% ggplotly()
+pge_comm_chart
 ```
 
 
@@ -223,8 +223,8 @@ pge_comm19_20_21_chart <-
     fill = "Electricity Type"
 )
     
-pge_comm19_20_21_chart %>% ggplotly()
-pge_res19_20_21_chart %>% ggplotly()
+pge_comm19_20_21_chart
+pge_res19_20_21_chart
 ```
 
 
