@@ -1,7 +1,7 @@
 ---
 title: "Assignment1"
 author: "RyanOConnor"
-date: "9/24/2021"
+date: "9/28/2021"
 output: html_document
 ---
 
@@ -9,18 +9,19 @@ output: html_document
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 ```
 Comment on any observable changes in energy consumption that may be attributable to the COVID-19 Pandemic:
-  
-  When looking at the PG&E territorial residential energy use, there is very little appreciable difference between the Pre-Covid (2019) and COVID (2020-21) states in terms of gas energy consumption, and only a minor increase in home electricity usage during the Summer of 2020 as compared to the Summer of 2019. However, there is a very noticeable decline in the energy consumption in the commercial sector in the Spring and Summer of 2020 as compared to 2019, followed by an increase in the Spring and Summer of 2021 above even the "normal" pre-COVID levels of 2019 and prior.The decline in commercial energy consumption in 2020 is intuitively linked to the reduced commercial mobility of society around the Bay Area. However, the increase in 2021 is surprising, considering the lingering restrictions in the Bay Area due to COVID, as well as the increase above Pre-COVID levels. One potential explanation for this is a "catch-up," with both consumers and businesses making up for lost time and seeking to engage in more social activity follow the COVID "burnout." What is interesting and notable is that, while intuitively the proportion of time spent at home increased in 2020, the gross demand of residential energy did not increase significantly, but instead largely remained the same. This seems to indicate that staying at home more does not necessarily equate to using more energy at home.
-  
-  Key assumptions that have been made in this analysis of 2019 vs 2020/2021 include the assumption that energy consumption is driven by social mobility of people and the resulting commercial/residential balance of people's time and energy demand. What this analysis does not account for is the potential climactic demand for energy (i.e. if it is warmer in the summer or colder in the winter, there will be greater demand in energy) or economic ability to consume energy (i.e. the need to limit energy consumption due to reduced income). Below the plots output for the entire time series, I've generated 2 plots displaying a zoomed-in view of these energy demand trends, specific to the time period from Jan 2019-Jul 2021, which show in closer detail the 2019-2021 trend in energy consumption.
+
+When looking at the PG&E territorial residential energy use, there is very little appreciable difference between the Pre-Covid (2019) and COVID (2020-21) states in terms of gas energy consumption, and only a minor increase in home electricity usage during the Summer of 2020 as compared to the Summer of 2019. However, there is a very noticeable decline in the energy consumption in the commercial sector in the Spring and Summer of 2020 as compared to 2019, followed by an increase in the Spring and Summer of 2021 above even the “normal” pre-COVID levels of 2019 and prior.The decline in commercial energy consumption in 2020 is intuitively linked to the reduced commercial mobility of society around the Bay Area. However, the increase in 2021 is surprising, considering the lingering restrictions in the Bay Area due to COVID, as well as the increase above Pre-COVID levels. One potential explanation for this is a “catch-up,” with both consumers and businesses making up for lost time and seeking to engage in more social activity follow the COVID “burnout.” What is interesting and notable is that, while intuitively the proportion of time spent at home increased in 2020, the gross demand of residential energy did not increase significantly, but instead largely remained the same. This seems to indicate that staying at home more does not necessarily equate to using more energy at home.
+
+Key assumptions that have been made in this analysis of 2019 vs 2020/2021 include the assumption that energy consumption is driven by social mobility of people and the resulting commercial/residential balance of people’s time and energy demand. While this is a reasonable assumption given the unique nature and scale of the shift in global norms from 2019 to 2020/2021, it neglects potential confounding variables that could also influence changes in data such as these. What this analysis does not account for, for example, is the potential climactic demand for energy (i.e. if it is warmer in the summer or colder in the winter, there will be greater demand in energy) or economic ability to consume energy (i.e. the need to limit energy consumption due to reduced income or unemployment). Below the plots output for the entire time series, I’ve generated 2 plots displaying a zoomed-in view of these energy demand trends, specific to the time period from Jan 2019-Jul 2021, which show in closer detail the 2019-2021 trend in energy consumption. The most clearly visible change can be seen in the commercial sector in the winter and early spring of 2020, when the pandemic was first coming arriving. Regarding the confounding variables, however, it is worth noting that statewide, 2020 was an anomalously warm year, especially as compared to 2019 (https://www.nbcbayarea.com/news/local/climate-in-crisis/climate-focus-bay-areas-hotter-temperatures/2484549/). Therefore, the decrease in commercial winter energy usage could in fact be driven by the warmer temperatures, and likewise the lack of increase in home energy usage could be similarly caused by the warmer temperatures offsetting the need to stay home more frequently. More analysis would need to be performed in order to isolate these variables, though at this stage they are worth noting. 
+
 ```{r, error = T}
 library(tidyverse)
-##nested for loop that iterates through all combinations of Year_Q for Electric
-years <- 2017:2021
+
+years <- 2017:2020
 quarters <- 1:4
 type <- "Electric"
 
-pge_17_21_Electric <- NULL
+pge_17_20_Electric <- NULL
 
 for(quarter in quarters) {
   for(year in years){
@@ -34,23 +35,52 @@ for(quarter in quarters) {
         type,
         "UsageByZip.csv"
       )
-    print(filename)
+    #print(filename)
     temp <- read_csv(filename)
-    pge_17_21_Electric <- rbind(pge_17_21_Electric,temp)
+    pge_17_20_Electric <- rbind(pge_17_20_Electric,temp)
     # Note rbind requires field names to be consistent for every new thing that you add.
-    saveRDS(pge_17_21_Electric, "pge_17_21_Electric.rds")
+    saveRDS(pge_17_20_Electric, "pge_17_20_Electric.rds")
   }}
-#The error in this outpt is expected and tolerated because of the lack of 2021_Q3 and 2021_Q4 CSVs. This error is remedied in the knitr process by annotating the beginning of the for loop chunks with {r, error = T} to instruct the knitr process to ignore the error. 
+
+```
+
+```{r, error = T}
+library(tidyverse)
+
+years <- 2021
+quarters <- 1:2
+type <- "Electric"
+
+pge_21_Electric <- NULL
+
+for(quarter in quarters) {
+  for(year in years){
+    filename <-
+      paste0(
+        "PGE_",
+        year,
+        "_Q",
+        quarter,
+        "_",
+        type,
+        "UsageByZip.csv"
+      )
+    #print(filename)
+    temp <- read_csv(filename)
+    pge_21_Electric <- rbind(pge_21_Electric,temp)
+    # Note rbind requires field names to be consistent for every new thing that you add.
+    saveRDS(pge_21_Electric, "pge_21_Electric.rds")
+  }}
+
 ```
 
 ```{r, error = T}
 
-years <- 2017:2021
+years <- 2017:2020
 quarters <- 1:4
 type <- "Gas"
 
-pge_17_21_Gas <- NULL
-##nested for loop that iterates through all combinations of Year_Qn for Electric
+pge_17_20_Gas <- NULL
 
 for(quarter in quarters) {
   for(year in years){
@@ -64,13 +94,46 @@ for(quarter in quarters) {
         type,
         "UsageByZip.csv"
       )
-    print(filename)
+    #print(filename)
     temp <- read_csv(filename)
-    pge_17_21_Gas <- rbind(pge_17_21_Gas,temp)
+    pge_17_20_Gas <- rbind(pge_17_20_Gas,temp)
     # Note rbind requires field names to be consistent for every new thing that you add.
-    saveRDS(pge_17_21_Gas, "pge_17_21_Gas.rds")
-  }}
-#The error in this outpt is expected and tolerated because of the lack of 2021_Q3 and 2021_Q4 CSVs. This error is remedied in the knitr process by annotating the beginning of the for loop chunks with {r, error = T} to instruct the knirt process to ignore the error. 
+    saveRDS(pge_17_20_Gas, "pge_17_20_Gas.rds")
+}}
+```
+
+```{r, error = T}
+
+years <- 2021
+quarters <- 1:2
+type <- "Gas"
+
+pge_21_Gas <- NULL
+
+for(quarter in quarters) {
+  for(year in years){
+    filename <-
+      paste0(
+        "PGE_",
+        year,
+        "_Q",
+        quarter,
+        "_",
+        type,
+        "UsageByZip.csv"
+      )
+    #print(filename)
+    temp <- read_csv(filename)
+    pge_21_Gas <- rbind(pge_21_Gas,temp)
+    # Note rbind requires field names to be consistent for every new thing that you add.
+    saveRDS(pge_21_Gas, "pge_21_Gas.rds")
+}}
+```
+
+```{r}
+pge_17_21_Electric <- rbind(pge_17_20_Electric,pge_21_Electric)
+
+pge_17_21_Gas <- rbind(pge_17_20_Gas,pge_21_Gas)
 ```
 
 ```{r}
@@ -78,16 +141,14 @@ library(tidyverse)
 library(zoo)
 
 pge_elec_filter <- filter(pge_17_21_Electric, CUSTOMERCLASS %in% c("Elec- Residential","Elec- Commercial"))
-#Creating an object with only Residential and Commercial Electrical data from the bound object containing all Electric data from 17-12
 
 pge_gas_filter <- filter(pge_17_21_Gas, CUSTOMERCLASS %in% c("Gas- Residential","Gas- Commercial"))
-#Same as above for gas data
 
 pge_elec_filter["kBTUs"] <- pge_elec_filter$TOTALKWH * 3412.14/1000
-#Conversion from KWH to kBTUs and creating an additional field for kBTUs
+#Conversion from KWH to kBTUs
 
 pge_gas_filter["kBTUs"] <- pge_gas_filter$TOTALTHM * 99976.1/1000
-#Conversion from THERM to kBTUs and creating an additional field for kBTUs
+#Conversion from THERM to kBTUs
 
 pge_elec_select <-
   select(
@@ -99,19 +160,16 @@ pge_gas_select <-
     pge_gas_filter,
     -c(COMBINED, AVERAGETHM, TOTALTHM, AVERAGETHM)
   )
-#Removing irrelevant fields so that gas and electric have a similar scheme and can be bound
+
 pge_gas_elec_bound <- 
   rbind(
     pge_gas_select, pge_elec_select)
-#Binding gas and electric together, now that the field schema match
 
 pge_gas_elec_bound["Date"] <- "0"
 pge_gas_elec_bound$Date <- as.yearmon(paste(pge_gas_elec_bound$YEAR, pge_gas_elec_bound$MONTH), "%Y %m")
-#Inserting a Date field that is correctly formatted as a date-type so that the x-axis can represent all months and years together in order. Unsure if ggplot has a way to do this, but I used as.yearmon in the Zoo package, which seemed to work just fine
 
 pge_res_bound <- filter(pge_gas_elec_bound, CUSTOMERCLASS %in% c("Gas- Residential","Elec- Residential"))
 pge_comm_bound <- filter(pge_gas_elec_bound, CUSTOMERCLASS %in% c("Elec- Commercial","Gas- Commercial"))
-#Filtering so that residential and commercial get their own objects and can be easily visualized independently 
 ```
 
 
@@ -139,8 +197,7 @@ pge_res_chart <-
     title = "PG&E Territory Residential Energy Usage, 2017-2021",
     fill = "Electricity Type"
 )
-pge_res_chart
-#added a theme to the x-axis to angle the text of the axis labels at 75 deg
+    pge_res_chart
 ```
 
 ```{r}
@@ -167,7 +224,7 @@ pge_comm_chart <-
     title = "PG&E Territory Commercial Energy Usage, 2017-2021",
     fill = "Electricity Type"
 )
-pge_comm_chart
+    pge_comm_chart
 ```
 
 
@@ -223,8 +280,74 @@ pge_comm19_20_21_chart <-
     fill = "Electricity Type"
 )
     
-pge_comm19_20_21_chart
-pge_res19_20_21_chart
+    pge_comm19_20_21_chart
+    pge_res19_20_21_chart
 ```
+
+
+##Tried to do this in plotly, but it returned an error 
+# ```{r}
+# library(plotly)
+# 
+# plot_ly() %>% 
+#   add_trace(
+#     data = pge_gas_elec_bound %>% filter(CUSTOMERCLASS == "Elec- Residential"),
+#     x = ~MONTH %>% factor(),
+#     y = ~kBTUs,
+#     type = "bar",
+#     name = "Residential Electricity"
+#   ) %>% 
+#   add_trace(
+#     data = pge_gas_elec_bound %>% filter(CUSTOMERCLASS == "Gas- Residential"),
+#     x = ~MONTH %>% factor(),
+#     y = ~kBTUs,
+#     type = "bar",
+#     name = "Residential Gas"
+#   ) %>% 
+#   layout(
+#     xaxis = list(
+#       title = "Month",
+#       fixedrange = T
+#     ),
+#     yaxis = list(
+#       title = "kBTU",
+#       fixedrange = T
+#     ),
+#     barmode = "stack",
+#     legend = list(title = list(text = "Residential Energy Type"))
+#   ) %>% 
+#   config(displayModeBar = F)
+# 
+# plot_ly() %>% 
+#   add_trace(
+#     data = pge_gas_elec_bound %>% filter(CUSTOMERCLASS == "Elec- Commerical"),
+#     x = ~MONTH %>% factor(),
+#     y = ~kBTUs,
+#     type = "bar",
+#     name = "Commercial"
+#   ) %>% 
+#   add_trace(
+#     data = pge_gas_elec_bound %>% filter(CUSTOMERCLASS == "Gas- Commercial"),
+#     x = ~MONTH %>% factor(),
+#     y = ~kBTUs,
+#     type = "bar",
+#     name = "Residential"
+#   ) %>% 
+#   layout(
+#     xaxis = list(
+#       title = "Month",
+#       fixedrange = T
+#     ),
+#     yaxis = list(
+#       title = "kBTU",
+#       fixedrange = T
+#     ),
+#     barmode = "stack",
+#     legend = list(title = list(text = "Commercial Energy Type"))
+#   ) %>% 
+#   config(displayModeBar = F)
+# ```
+
+
 
 
