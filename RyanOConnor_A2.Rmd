@@ -1,0 +1,285 @@
+---
+title: "Assignment 2"
+author: "RyanOConnor"
+date: "October 5, 2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+```
+```{r}
+library(devtools)
+install_github('walkerke/tigris')
+library(tigris)
+library(tidyverse)
+library(tigris) 
+library(sf)
+library(mapview) 
+library(leaflet)
+library(censusapi)
+Sys.setenv(CENSUS_KEY="cccdf64b447748daaddebe5f9aeaec92fc4b744c")
+```
+
+The key finding of this analysis is that the white Population of Half Moon Bay, CA has generally increased since 2010. What is especially interesting is when we then plot the change in population density for all people living in Half Moon Bay (Figure 2). Here we see a very different picture, with most of the population change being negative, indicating that the area is less dense across all demographics. Importantly, the average magnitude of total change is much lower than that of the white population. The mean change per block in the total population was -5.5 persons(acre)^-1, as compared to +10.3 persons(acre)^-1 in the white population. The difference in sign of these mean changes is also of critical importance. Overall, average density of the population decreased, while the average white population density increased. 
+
+Between 2010 and 2020, some socioeconomic force drove the total population in Half Moon Bay down. However, the white population increase substantially. Given the socioeconomic advantage of the white population, we can therefore reason that less advantaged groups left the area due to cost or opportunity and more white people moved into the area, building increased capacity for dense housing (apartments, condos, etc.). The amount of white people coming in did not offset the net average loss in density, however the demographic did substantially increase its own density in the process. 
+
+These conclusions are founded upon some important assumptions. First, we assume that each census block should be equally weighted in terms of how much its density contributes to the overall density of the community. Essentially, we assume that blocks are constructed around relatively equal population sizes. Second, we assume that the white population generally experiences more favorable socioeconomic conditions. This assumption is certainly true in a general sense, however this analysis does not account for the local socioeconomic situation of Half Moon Bay. A third crucial assumption is that all residents of Half Moon Bay were in fact accounted for. We do not consider that many homes in Half Moon Bay may be owned by white people and rented as vacation homes, or leased by people of other demographics. Further analysis could examine responses from the ACS data set to confirm the residence type of each, however it was not within the scope of this analysis. The largest caveat in the data is that from 2010 to 2020 the geometries of census blocks is not uniform. Using spatial joins and intersections, we have estimated the population change and fit them to the blocks as they exist in 2020, however this does create the possibility that population in the margins between changed blocks has not been correctly captured.
+
+```{r}
+dec_vars_2020 <-
+  listCensusMetadata(
+    name = "2020/dec/pl",
+    type = "variables"
+  )
+SMC_pop_2020 <-
+  getCensus(
+    name = "dec/pl",
+    vintage = 2020,
+    region = "block:*", 
+    regionin = "state:06+county:081",
+    vars = "P1_003N"
+  ) %>% 
+  transmute(
+    GEOID20 =  paste0(state,county,tract,block),
+    pop_2020 = P1_003N
+  )
+blocks_2020 <- blocks("CA", "San Mateo County", year = 2020, progress_bar = F)
+```
+
+
+```{r}
+dec_vars_2010 <-
+  listCensusMetadata(
+    name = "2010/dec/pl",
+    type = "variables"
+  )
+SMC_pop_2010 <-
+  getCensus(
+    name = "dec/pl",
+    vintage = 2010,
+    region = "block:*", 
+    regionin = "state:06+county:081",
+    vars = "P001003"
+  ) %>% 
+  transmute(
+    GEOID10 = paste0(state,county,tract,block),
+    pop_2010 = P001003
+  )
+blocks_2010 <- blocks("CA", "San Mateo County", year = 2010, progress_bar = F)
+```
+
+```{r}
+saveRDS(dec_vars_2010, "dev_vars_2010.rds")
+```
+
+```{r}
+saveRDS(dec_vars_2020, "dev_vars_2020.rds")
+```
+
+
+```{r}
+HMB_boundary <- places("CA", progress_bar = F) %>% 
+  filter(NAME == "Half Moon Bay")
+
+HMB_blocks_2010 <- blocks_2010 %>% 
+  st_centroid() %>% 
+  .[HMB_boundary,] %>% 
+  st_drop_geometry() %>% 
+  left_join(blocks_2010 %>% select(GEOID10)) %>% 
+  st_as_sf() %>% 
+  select(GEOID10) %>% 
+  left_join(SMC_pop_2010)
+
+# mapview(HMB_boundary) + mapview(HMB_blocks_2010, alpha.regions = 0, color = "red", lwd = 2)
+
+```
+
+```{r}
+HMB_blocks_2020 <- blocks_2020 %>%
+  .[HMB_boundary, ] %>% 
+  select(GEOID20) %>% 
+  left_join(SMC_pop_2020)
+```
+
+```{r}
+HMB_blocks_2020_intersect <- HMB_blocks_2020 %>% 
+  st_transform(26910) %>% 
+  mutate(original_area = st_area(.)) %>% 
+  st_intersection(
+   HMB_blocks_2010 %>%
+      select(GEOID10) %>% 
+      st_transform(26910)
+  ) %>% 
+  mutate(
+    leftover_area = st_area(.),
+    perc_area = as.numeric(leftover_area / original_area),
+    pop_2020 = pop_2020 * perc_area
+  )
+```
+
+
+```{r}
+HMB_blocks_2020_reshaped <- HMB_blocks_2020_intersect %>%
+  st_drop_geometry() %>% 
+  group_by(GEOID10) %>% 
+  summarize(
+    pop_2020 = sum(pop_2020, na.rm=T) %>% round()
+  )
+```
+
+```{r}
+projection <-  "+proj=utm +zone=10 +ellps=GRS80 +datum=NAD83 +units=ft +no_defs"
+HMB_pop_2010_2020 <- HMB_blocks_2010 %>% 
+  left_join(HMB_blocks_2020_reshaped) %>% 
+  mutate(
+    absolute_pop = (pop_2010-pop_2020) / as.numeric(st_area(.)) * 43560)
+```
+
+```{r}
+max <- max(abs(HMB_pop_2010_2020$absolute_pop))
+absolute_pal <- colorNumeric(
+  palette = "PiYG",
+  domain = c(-max, max)
+)
+```
+
+```{r}
+leaflet(HMB_pop_2010_2020) %>% 
+  addProviderTiles(provider = providers$CartoDB.Positron) %>% 
+  addPolygons(
+    fillColor = ~absolute_pal(absolute_pop),
+    label = ~round(absolute_pop),
+    color = "white",
+    opacity = 0.5,
+    fillOpacity = 0.75,
+    weight = 1
+  ) %>% 
+  addLegend(
+    pal = absolute_pal,
+    value = c(-max,max),
+    title = "Half Moon Bay White Population <br> Density Change (people per acre) <br> from 2010 to 2020"
+  )
+```
+Figure 1. Population change of people identifying as White in people(acre)^1 in Half Moon Bay, CA from 2010 to 2020 by Census Block 
+
+
+```{r}
+##Rerunning all code for total population change for further analysis
+SMCtotal_pop_2020 <-
+  getCensus(
+    name = "dec/pl",
+    vintage = 2020,
+    region = "block:*", 
+    regionin = "state:06+county:081",
+    vars = "P1_001N"
+  ) %>% 
+  transmute(
+    GEOID20 =  paste0(state,county,tract,block),
+    pop_2020 = P1_001N
+  )
+blocks_2020 <- blocks("CA", "San Mateo County", year = 2020, progress_bar = F)
+```
+
+
+```{r}
+
+SMCtotal_pop_2010 <-
+  getCensus(
+    name = "dec/pl",
+    vintage = 2010,
+    region = "block:*", 
+    regionin = "state:06+county:081",
+    vars = "P001001"
+  ) %>% 
+  transmute(
+    GEOID10 = paste0(state,county,tract,block),
+    pop_2010 = P001001
+  )
+blocks_2010 <- blocks("CA", "San Mateo County", year = 2010, progress_bar = F)
+```
+
+
+```{r}
+
+HMBtotal_blocks_2010 <- blocks_2010 %>% 
+  st_centroid() %>% 
+  .[HMB_boundary,] %>% 
+  st_drop_geometry() %>% 
+  left_join(blocks_2010 %>% select(GEOID10)) %>% 
+  st_as_sf() %>% 
+  select(GEOID10) %>% 
+  left_join(SMCtotal_pop_2010)
+
+# mapview(HMB_boundary) + mapview(HMB_blocks_2010, alpha.regions = 0, color = "red", lwd = 2)
+
+```
+
+```{r}
+HMBtotal_blocks_2020 <- blocks_2020 %>%
+  .[HMB_boundary, ] %>% 
+  select(GEOID20) %>% 
+  left_join(SMCtotal_pop_2020)
+```
+
+```{r}
+HMBtotal_blocks_2020_intersect <- HMBtotal_blocks_2020 %>% 
+  st_transform(26910) %>% 
+  mutate(original_area = st_area(.)) %>% 
+  st_intersection(
+   HMBtotal_blocks_2010 %>%
+      select(GEOID10) %>% 
+      st_transform(26910)
+  ) %>% 
+  mutate(
+    leftover_area = st_area(.),
+    perc_area = as.numeric(leftover_area / original_area),
+    pop_2020 = pop_2020 * perc_area
+  )
+```
+
+
+```{r}
+HMBtotal_blocks_2020_reshaped <- HMBtotal_blocks_2020_intersect %>%
+  st_drop_geometry() %>% 
+  group_by(GEOID10) %>% 
+  summarize(
+    pop_2020 = sum(pop_2020, na.rm=T) %>% round()
+  )
+```
+
+```{r}
+projection <-  "+proj=utm +zone=10 +ellps=GRS80 +datum=NAD83 +units=ft +no_defs"
+HMBtotal_pop_2010_2020 <- HMBtotal_blocks_2010 %>% 
+  left_join(HMBtotal_blocks_2020_reshaped) %>% 
+  mutate(
+    absolute_pop = (pop_2010-pop_2020) / as.numeric(st_area(.)) * 43560)
+```
+
+```{r}
+max <- max(abs(HMBtotal_pop_2010_2020$absolute_pop))
+absolute_pal <- colorNumeric(
+  palette = "PiYG",
+  domain = c(-max, max)
+)
+```
+
+```{r}
+leaflet(HMBtotal_pop_2010_2020) %>% 
+  addProviderTiles(provider = providers$CartoDB.Positron) %>% 
+  addPolygons(
+    fillColor = ~absolute_pal(absolute_pop),
+    label = ~round(absolute_pop),
+    color = "white",
+    opacity = 0.5,
+    fillOpacity = 0.75,
+    weight = 1
+  ) %>% 
+  addLegend(
+    pal = absolute_pal,
+    value = c(-max,max),
+    title = "Half Moon Bay Total Population <br> Density Change (people per acre) <br> from 2010 to 2020"
+  )
+```
+Figure 2. Total Population change in people(acre)^1 in Half Moon Bay, CA from 2010 to 2020 by Census Block 
