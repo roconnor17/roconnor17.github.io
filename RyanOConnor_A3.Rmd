@@ -1,0 +1,186 @@
+---
+title: "Assignment 3"
+author: "RyanOConnor"
+date: "10/7/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+```
+```{r}
+library(devtools)
+install_github('walkerke/tigris')
+library(tigris)
+library(tidyverse)
+library(tigris) 
+library(sf)
+library(mapview) 
+library(leaflet)
+library(censusapi)
+library(ggplot2)
+library(dplyr)
+Sys.setenv(CENSUS_KEY="cccdf64b447748daaddebe5f9aeaec92fc4b744c")
+```
+```{r}
+temp <- tempfile()
+download.file("https://www2.census.gov/programs-surveys/acs/data/pums/2018/5-Year/csv_hca.zip",destfile = temp)
+
+pums_hca_2018_5yr <- read_csv(unzip(temp,"psam_h06.csv"))
+
+unlink(temp)
+```
+
+```{r}
+pums_2019_1yr <- getCensus(
+  name = "acs/acs1/pums",
+  vintage = 2019,
+  region = "public use microdata area:*", 
+  regionin = "state:06",
+  vars = c(
+    "SERIALNO",
+    "SPORDER",
+    "PWGTP",
+    "WGTP",
+    "NP",
+    "HHL",
+    "HINCP",
+    "TEN",
+    "REFR",
+    "AGEP"
+  )
+)
+```
+```{r}
+ca_pumas <-
+  pumas("CA", cb = T, progress_bar = F)
+
+bay_county_names <-
+  c(
+    "Alameda",
+    "Contra Costa",
+    "Marin",
+    "Napa",
+    "San Francisco",
+    "San Mateo",
+    "Santa Clara",
+    "Solano",
+    "Sonoma"
+  )
+
+bay_counties <-
+  counties("CA", cb = T, progress_bar = F) %>%
+  filter(NAME %in% bay_county_names)
+
+bay_pumas <-
+  ca_pumas %>% 
+  st_centroid() %>% 
+  .[bay_counties, ] %>% 
+  st_drop_geometry() %>% 
+  left_join(ca_pumas %>% select(GEOID10)) %>% 
+  st_as_sf()
+
+bay_pums <-
+  pums_2019_1yr %>% 
+  mutate(
+    PUMA = str_pad(public_use_microdata_area,5,"left","0")
+  ) %>% 
+  filter(PUMA %in% bay_pumas$PUMACE10)
+```
+```{r}
+bay_pums_example <-
+  bay_pums %>% 
+  filter(!duplicated(SERIALNO)) %>% 
+  mutate(
+    WGTP = as.numeric(WGTP),
+    over65_live_alone = ifelse(
+      (NP = 1) &
+        (AGEP > 65) &
+        (HHL != 1),
+      WGTP,
+      0
+    )
+  ) %>% 
+  group_by(PUMA) %>% 
+  summarize(
+    perc_over65_live_alone =
+      sum(over65_live_alone, na.rm =T)/sum(WGTP, na.rm = T)*100
+  ) %>% 
+  left_join(
+    bay_pumas %>% 
+      select(PUMACE10),
+    by = c("PUMA" = "PUMACE10")
+  ) %>% 
+  st_as_sf()
+```
+
+Many populations throughout our society are at particular risk from heat exhaustion, heat stroke, or other heat related injuries and illnesses. According the US Centers for Disease Control and Prevention (CDC), several non-environmental risk factors predispose people to health-related illness and death, including existing medical conditions, income, age, and social isolation (Picture of America Report, CDC, 2017). An analysis, therefore, of the broad demographic indicators of heat risk should include some combination of these factors. For this particular analysis, I have chosen two indicators that I believe are particularly important; age and social isolation. In Figure 1 below, I have mapped the percentage of Bay Area residents by county that are both over 65 years of age and live alone. This cross-section identifies people at broad physiological risk by including all people over 65, regardless of underlying condition. It also identifies people at risk of being "left behind" in a severe heat event, namely those that live alone and may not have immediate access to care or assistance when it is needed. By identifying these "hot spots," municipal managers and emergency service providers can more efficiently plan where their care will be most needed, and police and non-profits can target where wellness checks and non-emergent public service should be focused as heat events unfold. Ideally, such an analysis will be capable not only of increasing response to heat-related emergencies but also facilitate the prevention of them through proactive, targeted measures. 
+
+This map is developed using the 2019 PUMS data from the US Census Bureau. The greatest assumption is therefore that the population distribution now is the same as it was in 2019 when this data was released (as well as prior to that, when the data was collected). The PUMS data also importantly builds its data set using representative samples. The 2019 data set is a 1-year representative sample built from 1% of the population. This n is still large overall (>783k observations), as we examine smaller geographies, the error increases. Therefore, distribution at the Bay Area-level is more error-prone than distribution at the US-level. Error increases as we decrease our geographic footprint (and representative sample size) down to the county level. Below Fig 1 we list the respective margins of error, which shows that the margin of error, according to eq. 1, for the Bay Area is 220% greater than that of the full US-wide analysis. Given the size of the population in the Bay Area, the margin of error is still extremely small at a 95% confidence interval, however the trend is important to note and the assumption that the sample is truly random and representative of the population is critical to understand, as it is with all surveys. 
+
+```{r}
+pums_pal <- colorNumeric(
+  palette = "Blues",
+  domain = bay_pums_example$perc_over65_live_alone
+)
+
+leaflet() %>%
+  addTiles() %>% 
+  addPolygons(
+    data = bay_pums_example,
+    fillColor = ~pums_pal(perc_over65_live_alone),
+    color = "white",
+    opacity = 0.5,
+    fillOpacity = 0.5,
+    weight = 1,
+    label = ~paste0(
+      round(perc_over65_live_alone), 
+      "% of residents are 65 years of age or older and live alone"
+    ),
+    highlightOptions = highlightOptions(
+      weight = 2,
+      opacity = 1
+    )
+  ) %>% 
+  addLegend(
+    data = bay_pums_example,
+    pal = pums_pal,
+    values = ~perc_over65_live_alone,
+    title = "% of residents who are over 65<br>and live alone in the Bay Area<br>Margin of error is +/- 0.07%"
+  )
+```
+Fig. 1 - The percentage (%) of residents in the Bay Area, by County, that are both 65 years old or older and live alone. 
+
+EQ. 1:
+ 
+  Margin of Error = Z * (p-hat(1-p-hat)/n)^(1/2)
+
+Where:
+ --p-hat is the sample proportion of the population (in this case 0.01)
+
+ --z is the z-score for the desired confidence interval (CI = 0.95, Z = 1.96)
+
+ --n is the sample size (77,242 for the Bay Area Combined)
+
+```{r}
+n <- 380091
+p <- seq(0,1,0.01)
+p_hat <- n/(100*n)
+#assuming the 1% sample of survey, p_hat = 1%
+p_95 <- 0.05
+z <- 1.96
+#z-value chosen to align with a 95% confidence interval
+me <- z * sqrt(p_hat * (1-p_hat)/n)
+
+n_bay <- 77242
+me_bay <- z * sqrt(p_hat * (1-p_hat)/n_bay)
+```
+The margin of error for the Bay Area Analysis (n=77,242) is:
+```{r}
+print(me_bay)
+```
+
+The margin of error for the US Analysis (n=380,091) would be
+```{r}
+print(me)
+```
