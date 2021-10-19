@@ -1,0 +1,535 @@
+---
+title: "Assignment4"
+author: "RyanOConnor"
+date: "10/13/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+```
+```{r}
+library(devtools)
+install_github('walkerke/tigris')
+library(tigris)
+library(tidyverse)
+library(tigris) 
+library(sf)
+library(mapview) 
+library(leaflet)
+library(censusapi)
+library(ggplot2)
+library(dplyr)
+Sys.setenv(CENSUS_KEY="cccdf64b447748daaddebe5f9aeaec92fc4b744c")
+```
+
+
+
+
+One of the primary drivers of inequality in urban communities is access to and attainment of various levels of education. The Bay Area is no different, and specifically Santa Clara county sees significant racial inequities among its over-25 population (hereafter referred to as the adult population) with regard to level of education attainment, according to the 2019 American Communities Survey (ACS 2019). While the adult population of Santa Clara County is overwhelmingly represented in the "Bachelors Degree or Higher Category," (Fig 1) the distribution of this attainment level is not equal to the baseline racial distribution. In Figure 2, we can see that the Asian racial group is disproportionately highly represented in the category of those holding a Bachelors Degree or Higher, while all other sampled racial groups are underrepresented in this category. At the next 2 levels of education attainment; "Some college or associates degree" and "High school graduate," the White population becomes over represented. At the lowest level, "Less than high school diploma," both White and Asian populations are significantly underrepresented, while the "Some other race" category is extremely over represented. The general story that the data tells is that, in mid-level attainment categories, the adult White population is over represented, in high-level attainment categories, the adult Asian population is over represented, and the adult Other population suffer from over representation at the lowest attainment level.
+
+In Part 2 of this analysis, we look at education attainment levels by ethnicity according to the Census. It is important to note a significant assumption of this data. We have here visualized by "White, Not Latinx", "Latinx", and "Not White, Not Latinx." This is constructed from the Census ACS data, which collects data based on individuals who identify as "Hispanic." Therefore we are making the assumption that those who identify as Hispanic would also identify as Latinx. We are also not capturing those that may identify as any other combination of Latinx and another race or ethnicity (Black Latinx, White Latinx, Alaska Native Latinx, etc.). The data, as we have collected it, presents a very clear and striking picture about the representation of Latinx community members with regard to education in Santa Clara County. It is particularly noticeable how strongly over represented the Latinx community is in the category of adults aged 25 years or older who have less than a high school diploma. In fact, 56% of the adult population without a high school diploma identifies as Latinx, while only 21% of the adult population identifies as Latinx. The Latinx community is over represented by a factor of 2.67 in the Bay Area with regard to the attainment of a High School Diploma. The over representation of the Latinx community continues up to those adults that have graduated high school (factor of 1.86), as well as those with some college or an associates degree (factor of 1.19). The story reverses, however, when looking at adults over 25 in the Bay area with a bachelor's degree or higher. In this case, the Latinx community is under represented drastically, by a factor of 3.0.
+
+
+#**PART 1:**
+
+```{r}
+acs_vars_2019_5yr <-
+  listCensusMetadata(
+    name = "2019/acs/acs5",
+    type = "variables"
+  )
+
+bay_county_names <-
+  c(
+    "Alameda",
+    "Contra Costa",
+    "Marin",
+    "Napa",
+    "San Francisco",
+    "San Mateo",
+    "Santa Clara",
+    "Solano",
+    "Sonoma"
+  )
+
+census_race_categories <- 
+  c(
+    "White Alone",
+    "Black or African American",
+    "American Indian and Alaska Native Alone",
+    "Asian Alone",
+    "Native Hawaiian and Other Pacific Islander Alone",
+    "Some Other Race Alone",
+    "Two or More Races"
+  )
+
+census_Educational_Attainment_categories <-
+  c(
+    "Less than high school diploma",
+    "High school graduate (includes equivalency)",
+    "Some college or associate's degree",
+    "Bachelor's degree or higher"
+  )
+
+SC_education_attainment_white_2019 <- getCensus(
+  name = "acs/acs5",
+  vintage = "2019",
+  region = "county:085",
+  regionin = "state:06",
+  vars = "group(C15002A)"
+) %>%
+  select(ends_with("E") & -c(state, NAME)) %>%
+  summarize_all(sum) %>%
+  pivot_longer(
+    everything(),
+    names_to = "name",
+    values_to = "estimate"
+  ) %>%
+  left_join(
+    acs_vars_2019_5yr %>%
+      select(name, label)
+  ) %>%
+  select(-name) %>%
+  separate(
+    label,
+    into = c(NA, NA, NA, "attainment"),
+    sep = "!!"
+  ) %>%
+  filter(!is.na(attainment)) 
+
+  SC_education_attainment_sum_2019 <- SC_education_attainment_white_2019 %>% group_by(attainment) %>% summarise(sum = sum(estimate))
+
+ SC_education_attainment_race_2019 <- 
+  1:7 %>% 
+  map_dfr(
+    function(x){
+      
+  getCensus(
+  name = "acs/acs5",
+  vintage = "2019",
+  region = "county:085",
+  regionin = "state:06",
+  vars = paste0("group(C15002",LETTERS[x],")")
+) %>%
+  select(ends_with("E") & -c(state, NAME)) %>%
+  summarize_all(sum) %>%
+  pivot_longer(
+    everything(),
+    names_to = "name",
+    values_to = "estimate"
+  ) %>%
+  left_join(
+    acs_vars_2019_5yr %>%
+      select(name, label)
+  ) %>%
+  select(-name) %>%
+  separate(
+    label,
+    into = c(NA, NA, NA, "attainment"),
+    sep = "!!"
+  ) %>%
+  filter(!is.na(attainment)) %>%
+    mutate(
+    race = census_race_categories[x]
+    ) 
+    })
+
+SC_education_attainment_sum_2019 <- SC_education_attainment_race_2019 %>% group_by(attainment, race) %>% summarise(sum = sum(estimate)) 
+```
+
+```{r}
+SC_education_attainment_sum_2019 %>%
+  ggplot() +
+  geom_bar(
+    aes(
+      x = attainment %>% factor(levels = rev(unique(c(
+    "Less than high school diploma",
+    "High school graduate (includes equivalency)",
+    "Some college or associate's degree",
+    "Bachelor's degree or higher"
+  )))),
+      y = sum,
+      fill = race %>% factor(levels = rev(unique(c(
+    "White Alone",
+    "Black or African American",
+    "American Indian and Alaska Native Alone",
+    "Asian Alone",
+    "Native Hawaiian and Other Pacific Islander Alone",
+    "Some Other Race Alone",
+    "Two or More Races"
+  ))))
+    ),
+    stat = "identity",
+    postion = "stack"
+  ) +
+  labs(
+    x = "Educational Attainment Level",
+    y = "Population",
+    title = "Santa Clara County Education Attainment by Race \n For the Population aged 25 and over",
+    fill = "Race of Individual"
+  ) +
+  coord_flip() +
+  theme(
+    legend.position = "bottom",
+    legend.direction = "vertical"
+  )  +
+  guides(
+    fill = guide_legend(
+      reverse = T
+    )
+  )
+```
+
+
+**Figure 1 -** A stacked, absolute magnitude graph of the educational attainment, by race, of the over-25 years old population of Santa Clara County, CA
+
+```{r}
+SC_race_total <-
+  SC_education_attainment_sum_2019 %>% 
+  group_by(race) %>% 
+  summarize(sum = sum(sum)) %>% 
+  mutate(attainment = "Total")
+
+SC_education_attainment_sum_2019 %>% 
+  group_by(attainment, race) %>% 
+  summarize(sum = sum(sum)) %>% 
+  rbind(SC_race_total) %>% 
+  ggplot() +
+  geom_bar(
+    aes(
+      x = attainment %>% factor(levels = rev(c(
+    "Total",
+    "Less than high school diploma",
+    "High school graduate (includes equivalency)",
+    "Some college or associate's degree",
+    "Bachelor's degree or higher"
+  ))),
+      y = sum,
+      fill = race %>% factor(levels = rev(unique(c(
+    "White Alone",
+    "Black or African American",
+    "American Indian and Alaska Native Alone",
+    "Asian Alone",
+    "Native Hawaiian and Other Pacific Islander Alone",
+    "Some Other Race Alone",
+    "Two or More Races"
+  ))))
+    ),
+    stat = "identity",
+    position = "fill"
+  ) +
+  labs(
+    x = "Educational Attainment Level",
+    y = "Population",
+    title = "Santa Clara County Education Attainment by Race \n For the Population Aged 25 and over",
+    fill = "Race of Individual"
+  ) +
+  coord_flip() +
+  theme(
+    legend.position = "bottom",
+    legend.direction = "vertical"
+  )  +
+  guides(
+    fill = guide_legend(
+      reverse = T
+    )
+  )
+```
+
+
+**Figure 2 -** A filled, proportional graph of the educational attainment, by race, of the over-25 years old population of Santa Clara County, CA
+
+
+
+#**Part 2**
+
+```{r}
+SC_education_attainment_hispanic_2019 <- getCensus(
+  name = "acs/acs5",
+  vintage = "2019",
+  region = "county:085",
+  regionin = "state:06",
+  vars = "group(C15002I)"
+) %>%
+  select(ends_with("E") & -c(state, NAME)) %>%
+  summarize_all(sum) %>%
+  pivot_longer(
+    everything(),
+    names_to = "name",
+    values_to = "estimate"
+  ) %>%
+  left_join(
+    acs_vars_2019_5yr %>%
+      select(name, label)
+  ) %>%
+  select(-name) %>%
+  separate(
+    label,
+    into = c(NA, NA, NA, "attainment"),
+    sep = "!!"
+  ) %>%
+  filter(!is.na(attainment)) 
+
+SC_education_attainment_hispanic_sum_2019 <- SC_education_attainment_hispanic_2019 %>% group_by(attainment) %>% summarise(sum = sum(estimate)) 
+
+SC_education_attainment_hispanic_sum_2019$Ethnicity <- "Latinx"
+
+colnames(SC_education_attainment_hispanic_sum_2019) <- c("Attainment","Estimate","Ethnicity")
+
+```
+
+```{r}
+SC_education_attainment_white_2019 <- getCensus(
+  name = "acs/acs5",
+  vintage = "2019",
+  region = "county:085",
+  regionin = "state:06",
+  vars = "group(C15002H)"
+) %>%
+  select(ends_with("E") & -c(state, NAME)) %>%
+  summarize_all(sum) %>%
+  pivot_longer(
+    everything(),
+    names_to = "name",
+    values_to = "estimate"
+  ) %>%
+  left_join(
+    acs_vars_2019_5yr %>%
+      select(name, label)
+  ) %>%
+  select(-name) %>%
+  separate(
+    label,
+    into = c(NA, NA, NA, "attainment"),
+    sep = "!!"
+  ) %>%
+  filter(!is.na(attainment)) 
+
+SC_education_attainment_white_sum_2019 <- SC_education_attainment_white_2019 %>% group_by(attainment) %>% summarise(sum = sum(estimate)) 
+
+
+  SC_education_attainment_white_sum_2019$Ethnicity <- "White, not latinx"
+  
+  colnames(SC_education_attainment_white_sum_2019) <- c("Attainment","Estimate","Ethnicity")
+```
+
+```{r}
+SC_education_attainment_total_2019 <- 
+  1:7 %>% 
+  map_dfr(
+    function(x){
+      
+  getCensus(
+  name = "acs/acs5",
+  vintage = "2019",
+  region = "county:085",
+  regionin = "state:06",
+  vars = paste0("group(C15002",LETTERS[x],")")
+) %>%
+  select(ends_with("E") & -c(state, NAME)) %>%
+  summarize_all(sum) %>%
+  pivot_longer(
+    everything(),
+    names_to = "name",
+    values_to = "estimate"
+  ) %>%
+  left_join(
+    acs_vars_2019_5yr %>%
+      select(name, label)
+  ) %>%
+  select(-name) %>%
+  separate(
+    label,
+    into = c(NA, NA, NA, "attainment"),
+    sep = "!!"
+  ) %>%
+  filter(!is.na(attainment)) %>%
+    mutate(
+    race = census_race_categories[x]
+    ) 
+    })
+
+SC_education_attainment_total_sum_2019 <- SC_education_attainment_total_2019 %>% group_by(attainment) %>% summarise(sum = sum(estimate))
+
+SC_education_attainment_total_sum_2019$Ethnicity <- "Total"
+  colnames(SC_education_attainment_total_sum_2019) <- c("Attainment","Estimate","Ethnicity")
+
+SC_education_attainment_White_Latinx_sum_2019 <- rbind(SC_education_attainment_white_sum_2019, SC_education_attainment_hispanic_sum_2019) %>% group_by(Attainment) %>% summarise(Estimate = sum(Estimate))
+
+SC_education_attainment_White_Latinx_sum_2019$Ethnicity <- "WhiteLatinx"
+  colnames(SC_education_attainment_White_Latinx_sum_2019) <- c("Attainment","Estimate","Ethnicity")
+
+SC_education_attainment_NWNLx_sum_2019 <- SC_education_attainment_total_sum_2019
+SC_education_attainment_NWNLx_sum_2019$Ethnicity <- "Not White, Not Latinx"
+SC_education_attainment_NWNLx_sum_2019$Estimate <-
+  SC_education_attainment_total_sum_2019$Estimate - 
+  SC_education_attainment_White_Latinx_sum_2019$Estimate
+
+
+  SC_education_attainment_NWNLx_sum_2019$Ethnicity <- "Not White, Not Latinx"
+  
+  colnames(SC_education_attainment_NWNLx_sum_2019) <- c("Attainment","Estimate","Ethnicity")
+```
+
+```{r}
+SC_Education_Attainment_Ethnicity_2019 <- rbind(SC_education_attainment_NWNLx_sum_2019,SC_education_attainment_hispanic_sum_2019,SC_education_attainment_white_sum_2019)
+```
+
+```{r}
+SC_Ethnicity_total <-
+  SC_Education_Attainment_Ethnicity_2019 %>% 
+  group_by(Ethnicity) %>% 
+  summarize(Estimate = sum(Estimate)) %>% 
+  mutate(Attainment = "Total")
+
+SC_Education_Attainment_Ethnicity_2019 %>% 
+  group_by(Attainment, Ethnicity) %>% 
+  summarize(Estimate = sum(Estimate)) %>% 
+  rbind(SC_Ethnicity_total) %>% 
+  ggplot() +
+  geom_bar(
+    aes(
+      x = Attainment %>% factor(levels = rev(c(
+    "Total",
+    "Less than high school diploma",
+    "High school graduate (includes equivalency)",
+    "Some college or associate's degree",
+    "Bachelor's degree or higher"
+  ))),
+      y = Estimate,
+      fill = Ethnicity %>% factor(levels = rev(unique(SC_Education_Attainment_Ethnicity_2019$Ethnicity)))
+    ),
+    stat = "identity",
+    position = "fill"
+  ) +
+  labs(
+    x = "Educational Attainment Level",
+    y = "Population",
+    title = "Santa Clara County Education Attainment by Ethnicity \n For the Population Aged 25 and over",
+    fill = "Ethnicity of Individual"
+  ) +
+  coord_flip() +
+  theme(
+    legend.position = "bottom",
+    legend.direction = "vertical"
+  )  +
+  guides(
+    fill = guide_legend(
+      reverse = T
+    )
+  )
+
+```
+
+**Figure 2 -** A filled, proportional graph of the educational attainment, by ethnicity, of the over-25 years old population of Santa Clara County, CA
+
+
+Over representation of Latinx Adults (25 yo or older) in the "High school graduate" category:
+
+
+```{r}
+(((SC_Education_Attainment_Ethnicity_2019 %>%
+    filter(Ethnicity == "Latinx") %>%
+    filter(Attainment == "High school graduate (includes equivalency)") %>%
+    pull(Estimate) %>%
+    sum()) /
+   SC_Education_Attainment_Ethnicity_2019 %>%
+    filter(Attainment == "High school graduate (includes equivalency)") %>%
+    pull(Estimate) %>%
+   sum() * 100) %>%
+  round()) /
+(((SC_Education_Attainment_Ethnicity_2019 %>%
+    filter(Ethnicity == "Latinx") %>%
+    pull(Estimate) %>%
+    sum()) /
+   SC_Education_Attainment_Ethnicity_2019 %>%
+    pull(Estimate) %>%
+   sum() * 100) %>%
+  round()
+ )  
+  
+```
+
+
+Over representation of Latinx Adults (25 yo or older) in the "Less than high school diploma" category:
+
+
+```{r}
+(((SC_Education_Attainment_Ethnicity_2019 %>%
+    filter(Ethnicity == "Latinx") %>%
+    filter(Attainment == "Less than high school diploma") %>%
+    pull(Estimate) %>%
+    sum()) /
+   SC_Education_Attainment_Ethnicity_2019 %>%
+    filter(Attainment == "Less than high school diploma") %>%
+    pull(Estimate) %>%
+   sum() * 100) %>%
+  round()) /
+(((SC_Education_Attainment_Ethnicity_2019 %>%
+    filter(Ethnicity == "Latinx") %>%
+    pull(Estimate) %>%
+    sum()) /
+   SC_Education_Attainment_Ethnicity_2019 %>%
+    pull(Estimate) %>%
+   sum() * 100) %>%
+  round()
+ )  
+  
+```
+
+
+Over representation of Latinx Adults (25 yo or older) in the "Some college or associate's degree" category:
+
+
+```{r}
+(((SC_Education_Attainment_Ethnicity_2019 %>%
+    filter(Ethnicity == "Latinx") %>%
+    filter(Attainment == "Some college or associate's degree") %>%
+    pull(Estimate) %>%
+    sum()) /
+   SC_Education_Attainment_Ethnicity_2019 %>%
+    filter(Attainment == "Some college or associate's degree") %>%
+    pull(Estimate) %>%
+   sum() * 100) %>%
+  round()) /
+(((SC_Education_Attainment_Ethnicity_2019 %>%
+    filter(Ethnicity == "Latinx") %>%
+    pull(Estimate) %>%
+    sum()) /
+   SC_Education_Attainment_Ethnicity_2019 %>%
+    pull(Estimate) %>%
+   sum() * 100) %>%
+  round()
+ )  
+  
+```
+
+
+Under representation of Latinx Adults (25 yo or older) in the "Bachelor's degree or higher" category:
+
+
+```{r}
+(((SC_Education_Attainment_Ethnicity_2019 %>%
+    filter(Ethnicity == "Latinx") %>%
+    pull(Estimate) %>%
+    sum()) /
+   SC_Education_Attainment_Ethnicity_2019 %>%
+    pull(Estimate) %>%
+   sum() * 100) %>%
+  round()
+ )  /
+
+(((SC_Education_Attainment_Ethnicity_2019 %>%
+    filter(Ethnicity == "Latinx") %>%
+    filter(Attainment == "Bachelor's degree or higher") %>%
+    pull(Estimate) %>%
+    sum()) /
+   SC_Education_Attainment_Ethnicity_2019 %>%
+    filter(Attainment == "Bachelor's degree or higher") %>%
+    pull(Estimate) %>%
+   sum() * 100) %>%
+  round()) 
+  
+```
+
