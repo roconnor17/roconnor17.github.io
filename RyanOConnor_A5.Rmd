@@ -1,7 +1,7 @@
 ---
 title: "Assignment5"
 author: "RyanOConnor"
-date: "10/24/2021"
+date: "10/26/2021"
 output: html_document
 ---
 
@@ -56,7 +56,9 @@ ces4_bay_pm25 <-
     ca_tracts %>% 
       transmute(GEOID = as.numeric(GEOID)), 
     by = c("Census Tract" = "GEOID")
-  ) %>% 
+  ) %>%
+  filter(
+    !is.na(PM2.5)) %>%
   st_as_sf()
 
 ces4_bay_asthma <-
@@ -68,6 +70,8 @@ ces4_bay_asthma <-
       transmute(GEOID = as.numeric(GEOID)), 
     by = c("Census Tract" = "GEOID")
   ) %>% 
+  filter(
+    !is.na(Asthma)) %>%
   st_as_sf()
 
 ces_asthma_pal <- colorNumeric(
