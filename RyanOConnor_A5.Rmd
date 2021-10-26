@@ -1,0 +1,344 @@
+---
+title: "Assignment5"
+author: "RyanOConnor"
+date: "10/24/2021"
+output: html_document
+---
+
+
+#**PART 1:**
+
+Below, figure one shows the spatial distribution of Asthma-Related Emergency Department (ED) visits per 10,000 persons, averaged over the period 2015-2017, sourced from the CA Office of Statewide Health Planning and Development (OSHPD). The distribution is age-adjusted, taking into account the age distribution of the population at the Zip-code level. In this map, we can see a clear preference for Asthma-related ED visits (and by extension likely prevalence of Asthma, though this data does not capture the full extent of Asthma -- only that which requires emergency care) in the East Bay, particularly in Vallejo, Fairfield, and Richmond. 
+
+Figure 2 shows the spatial distribution of fine particulate matter air pollution (PM2.5), as averaged annually in the Bay Area. PM2.5 data was collected via Satellite Remote Data and via remote monitoring stations run by the California Air Resources Board (CARB). Notably, this map shows a relatively high concentration essentially everywhere throughout the Bay area, however there is certainly a higher prevalence in the East Bay, much like the Asthma ED visit distribution. That said, there is significant exposure to PM2.5 essentially everywhere in the Bay area. This is not necessarily, surprising, considering that the Bay area is a) a heavily developed urban area, and b) in a region that is prone to wildfires. The maps together speak to some relationship between PM2.5 and emergency-level Asthma experiences, however it is unclear how strong that relationship is, given the instance of PM2.5 exposure throughout the region.
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+```
+```{r}
+library(tidyverse)
+library(leaflet)
+library(censusapi)
+library(sf)
+library(mapview)
+library(tigris)
+library(readxl)
+
+Sys.setenv(CENSUS_KEY="cccdf64b447748daaddebe5f9aeaec92fc4b744c")
+
+
+bay_county_names <-
+  c(
+    "Alameda",
+    "Contra Costa",
+    "Marin",
+    "Napa",
+    "San Francisco",
+    "San Mateo",
+    "Santa Clara",
+    "Solano",
+    "Sonoma"
+  )
+
+acs_vars_2019_5yr <-
+  listCensusMetadata(
+    name = "2019/acs/acs5",
+    type = "variables"
+  )
+ces4 <- read_excel("CalEnviroScreen_4.0Excel_ADA_D1_2021.xlsx")
+
+ca_tracts <- tracts("CA", cb = T, progress_bar = F)
+
+ces4_bay_pm25 <-
+  ces4 %>% 
+  filter(`California County` %in% bay_county_names) %>% 
+  select(`Census Tract`, PM2.5) %>% 
+  left_join(
+    ca_tracts %>% 
+      transmute(GEOID = as.numeric(GEOID)), 
+    by = c("Census Tract" = "GEOID")
+  ) %>% 
+  st_as_sf()
+
+ces4_bay_asthma <-
+  ces4 %>% 
+  filter(`California County` %in% bay_county_names) %>% 
+  select(`Census Tract`, Asthma) %>% 
+  left_join(
+    ca_tracts %>% 
+      transmute(GEOID = as.numeric(GEOID)), 
+    by = c("Census Tract" = "GEOID")
+  ) %>% 
+  st_as_sf()
+
+ces_asthma_pal <- colorNumeric(
+  palette = "Reds",
+  domain = ces4_bay_asthma$Asthma)
+  
+leaflet() %>%
+  addTiles() %>% 
+  addPolygons(
+    data = ces4_bay_asthma,
+    fillColor = ~ces_asthma_pal(Asthma),
+    color = "white",
+    opacity = 0.8,
+    fillOpacity = 0.8,
+    weight = 1,
+    label = ~paste0(
+      round(Asthma), 
+      "Asthma Rates"
+    ),
+    highlightOptions = highlightOptions(
+      weight = 2,
+      opacity = 1
+    )
+  ) %>% 
+  addLegend(
+    data = ces4_bay_asthma,
+    pal = ces_asthma_pal,
+    values = ~Asthma,
+    title = "Bay Area Asthma ED Visits Per<br>10,000 persons by Census Tract")
+```
+
+**Figure 1. Age-adjusted rate of Emergency Department (ED) visits per 10,000 persons related to Asthma, averaged from 2015-2017**
+```{r}
+ces_PM2.5_pal <- colorNumeric(
+  palette = "Reds",
+  domain = ces4_bay_pm25$PM2.5)
+  
+leaflet() %>%
+  addTiles() %>% 
+  addPolygons(
+    data = ces4_bay_pm25,
+    fillColor = ~ces_PM2.5_pal(PM2.5),
+    color = "white",
+    opacity = 0.8,
+    fillOpacity = 0.8,
+    weight = 1,
+    label = ~paste0(
+      round(PM2.5), 
+      "PPM2.5 Rates"
+    ),
+    highlightOptions = highlightOptions(
+      weight = 2,
+      opacity = 1
+    )
+  ) %>% 
+  addLegend(
+    data = ces4_bay_pm25,
+    pal = ces_PM2.5_pal,
+    values = ~PM2.5,
+    title = "Bay Area PM2.5 Annual Mean<br>Concentration by Census Tract")
+```
+**Figure 2. Annual mean concentration of fine particulate matter pollution (PM2.5). Values are the weighted average of measured monitor concentrations and satellite observations (μg/m3) from 2015-2017 **
+
+```{r}
+ces4_bay_joined <- st_join(
+  ces4_bay_asthma,
+  ces4_bay_pm25,
+  join = st_intersects
+) %>%
+  select(c("Census Tract.x","Asthma","PM2.5"))
+  
+colnames(ces4_bay_joined) <-
+  c("Census Tract",
+    "Asthma",
+    "PM2.5",
+    "geometry")
+```
+
+
+In the below plot (Figure 3) we see a scatter plot of mean PM2.5 concentration (x-axis) and rate of Asthma-related ED visits per 10,000 persons (y-axis), with each point in the plot representing one census tract in the Bay area. Also plotted is a best fit line, developed with the geom_smooth() function. This line's apparent fitness is relatively low, based solely on a qualitative "eye test" analysis of the plot in Figure 3. There is an extreme variation upwards into the upper-right section of the plot. While there is some positive relationship that is immediately apparent due primarily to the lack of points in the upper-left of the plot, the best fit line makes little sense in capturing that relationship. While there is a significant density of points that seem to be reasonably close to the best fit line, as a predictive model the line lacks fitness, and suggests that a simple linear fit is not the best solution for this regression.
+```{r}
+ggplot(
+  data = ces4_bay_joined,
+  aes(
+      x = PM2.5,
+      y = Asthma
+    )
+) +
+  geom_point() +
+  geom_smooth(method = "lm")
+```
+
+
+**Figure 3. PM2.5 annual mean concentrations by census track versus Asthma ED visits per 10,000 persons by census track for the Bay Area, with a best-fit line plotted**
+
+
+Below, you will find the outputs of a linear regression analysis, performed using the lm() function. From these outputs, it becomes clear that this linear fit is not effective in explaining the variance in the relationship between these data. The first set of outputs shows that the residuals are not centered around 0.0 [Median = -9.9091], nor is the distribution centered around 0.0 or the median and instead shows significant right-skew. Moreover, the slope of the best fit line shows a standard error that is not near-zero [0.5716], showing that there is some variation in the slope of the best-fit line, although it does return a high confidence level. Fianlly, the R-squared value is shown as 0.09482, which is extremely small (where 1.0 is a "perfect" correlation). **These outputs suggest that our dependent variable, in this case rates of Asthma-related ED visits, is not well explained by our independent variable, concentration of PM2.5 -- essentially that the model does not successfully explain variance.** While a low R-squared value can still accompany a successful model, when coupled with a visual inspection of the data as compared to the best fit line and the outputs of our lm() model, we can reasonably conclude that either 1) the data are not well-correlated, or 2) a linear model is not the best fit for the relationship between these data. 
+
+From this model output, we can conclude that *An increase of approximately __20 Asthma-related ED visits per 10,000 persons__ is associated with an increase of __1.0 units of concentration in PM2.5__*. We may also conclude that *__9.48% of the variation in Asthma-related ED visits is explained by the variation in concentration of PM2.5__*
+
+
+Model Output Summary:
+```{r}
+model <- lm(Asthma ~ PM2.5, ces4_bay_joined)
+
+summary(model)
+```
+
+
+
+```{r}
+slope <- 0
+yintercept <- mean(ces4_bay_joined$Asthma, na.rm = TRUE)
+
+best_fit_candidate <- slope * ces4_bay_joined$PM2.5 + yintercept 
+
+residuals <- ces4_bay_joined$Asthma - best_fit_candidate
+
+sumsq_residuals <- sum(residuals^2, na.rm = TRUE)
+
+#sumsq_residuals
+```
+
+```{r}
+get_sumsq_residuals <- function(x){
+
+  slope <- x[1]
+  yintercept <- x[2]
+  
+  best_fit_candidate <- slope * ces4_bay_joined$PM2.5 + yintercept 
+  
+  residuals <- ces4_bay_joined$Asthma - best_fit_candidate
+  
+  sumsq_residuals <- sum(residuals^2, na.rm = TRUE)
+}
+
+optimization <- optim(c(0,0), get_sumsq_residuals)
+
+#optimization
+```
+
+```{r}
+slope <- optimization$par[1]
+yintercept <- optimization$par[2]
+
+best_fit_candidate <- slope * ces4_bay_joined$PM2.5 + yintercept 
+
+residuals <- ces4_bay_joined$Asthma - best_fit_candidate
+
+#mean(residuals, na.rm = TRUE)
+```
+
+```{r}
+# ggplot(
+#   data = ces4_bay_joined,
+#   aes(
+#       x = PM2.5,
+#       y = Asthma
+#     )
+# ) +
+#   geom_point() +
+#   geom_smooth(method = "lm") +
+#   geom_line(
+#     aes(
+#       x = PM2.5,
+#       y = PM2.5 * optimization$par[1] + optimization$par[2]
+#     ),
+#     color = "red",
+#     linetype = 2,
+#     size = 2
+#   )
+```
+
+#**PART 2:**
+
+
+When we plot the distribution of the residuals from the scatterplot and best fit line in Figure 3, we can see a clear visualization of the problems discussed in Part 1 with the (linear) regression model. A linear regression as developed earlier in this analysis assumes that the residuals follow a normal distribution that is centered (roughly) around 0. However, in Figure 4, we can very clearly see that this distribution is not normal, nor is it centered around 0. Instead, the distribution is relatively bumpy, skewed significantly right, and centered well below 0.
+
+```{r}
+slope <- optimization$par[1]
+yintercept <- optimization$par[2]
+
+best_fit_candidate <- slope * ces4_bay_joined$PM2.5 + yintercept 
+
+residuals <- ces4_bay_joined$Asthma - best_fit_candidate
+
+# mean(residuals, na.rm = TRUE)
+plot(density(residuals, na.rm = TRUE))
+```
+
+**Figure 4. The distribution of residuals from the scatterplot and best-fit line of the correlation between PM2.5 concentrations and Asthma-related ED visits**
+
+If we instead plot the concentration of PM2.5 against the log of Asthma-related ED visits per 10,000 persons, we see a correlation and best fit line that, visually, appears to be much more successful and explanatory for the relationship between the data. We can see this assessment supported in the summary of outputs from the regression model below Figure 5, which shows a median residual that is reasonably close to 0 [0.0138] and a distribution of the residual quartiles and min/max that is relatively evenly distributed around that median. Additionally, the standard error of the slope of the best-fit line is low [0.01006]. The R-squared value is still very low [0.09952], however as we mentioned earlier, that does not mean that the fit line is poor, it only indicates that the line of best fit does not fully explain variance in the data. This is indicative of a relationship that experiences significant variance, which is reasonable to expect in the geographic distribution of PM2.5 vs Asthma-related ED visits.
+
+From this log-transformed model output, we can conclude that *An increase of approximately __log(0.3) Asthma-related ED visits per 10,000 persons__ is associated with an increase of __1.0 units of concentration in PM2.5__*. We may also conclude that *__9.9% of the variation in Asthma-related ED visits is explained by the variation in concentration of PM2.5__*
+
+```{r}
+ggplot(
+  data = ces4_bay_joined,
+  aes(
+      x = PM2.5,
+      y = log(Asthma)
+    )
+) +
+  geom_point() +
+  geom_smooth(method = "lm")
+```
+
+**Figure 5. A scatterplot of PM2.5 concentration versus the log of Asthma-related ED visits per 10,000 persons and a best fit line**
+
+```{r}
+log_model <- lm(log(Asthma) ~ PM2.5, ces4_bay_joined)
+
+summary(log_model)
+
+```
+
+#**Part 3**
+
+In Figure 6 below, we can see that the log transformation of the y-axis variable, Asthma-related ED visits per 10,000 persons, produces a distribution that is much more appropriately centered about the median (see also summary of model outputs above). Interestingly, the density plot of residuals for the log transformation produces a slightly bimodal distribution, with two distinct peaks on either side of 0. This is a surprising result and could be caused by a number of things related to the dataframe itself, including binary variables, the wrong kind of regression model, or having left out a variable. Based on our dataframe, I don't believe these to be the cause, so I suspect that this is just a reality of this relationship, perhaps a result of the two distinct patterns that could be taken from the log-transformed plot (one steeper in the center of the plot, and one more shallow stretching all the way across). This could indicate that a confounding variable is separating 2 distinct populations experiencing both of these variables in different ways. One potential confounding variable could be income, where lower income groups see a sharper positive correlation, while higher income groups see a more shallow positive correlation. While I am not a statistician, I would suspect that such a result could produce this kind of bimodal residuals distribution after the log-transformation. 
+
+In Figure 7, we can see a spatial distribution of the residuals, with the most negative residuals appearing light red, and the most positive residuals appearing dark red. The census tract in the Bay area that has **the most negative residual is Tract #6085513000, which is interestingly Stanford University.** A highly negative residual, in the context of Asthma estimation means that, for this census tract or any other with a negative residual, **the model over-estimates Asthma-related ED visits as a function of exposure to PM2.5.** Essentially, you would expect residents of this census tract to experience many more Asthma-related ED visits than they actually do. This could be for multiple reasons. **What I suspect is the most significant reason is that the population of Stanford University has the ability to remain indoors and still perform their work. In the context this particular association, these residents are able to avoid and mitigate exposure to PM2.5 because their livelihoods and responsibilities do not require them to work outdoors very much, as compared to many other populations. The data for PM2.5 exposure is _not_ individual exposure, but rather outdoor environmental exposure, which does not control for time spent sheltered indoors, away from the pollutants.** While the data as it is sourced is age-adjusted (though it's not entirely clear how), the age difference of this particular census tract could be also be a significant influence. Presumably, the child population of Stanford is very low, with the residents being primarily undergraduates and graduate students, which could skew the model for age-adjustment in a tract that is much more age-skewed than most residential areas. Additionally, the health and affluence of Stanford-affiliates is almost certainly higher than the general population, suggesting that they experience fewer pre-existing conditions, fewer negative health outcomes in general, and are less likely to experience a relationship between PM2.5 concentrations and Asthma-related ED visits.
+
+```{r}
+res_log <- resid(log_model)
+
+plot(density(res_log))
+```
+
+
+**Figure 6. The distribution of residuals for the log best fit model (produced in Figure 5)**
+
+
+```{r}
+ces4_bay_joined_res <- ces4_bay_joined %>%
+  filter(
+    !is.na(PM2.5),
+    !is.na(Asthma)
+  )
+ces4_bay_joined_res$Residuals <- log_model$resid
+```
+
+```{r}
+ces_residuals_pal <- colorNumeric(
+  palette = "Reds",
+  domain = ces4_bay_joined_res$Residuals)
+  
+leaflet() %>%
+  addTiles() %>% 
+  addPolygons(
+    data = ces4_bay_joined_res,
+    fillColor = ~ces_residuals_pal(Residuals),
+    color = "white",
+    opacity = 0.8,
+    fillOpacity = 0.8,
+    weight = 1,
+    label = ~paste0(
+      round(Residuals), 
+      "Residual"
+    ),
+    highlightOptions = highlightOptions(
+      weight = 2,
+      opacity = 1
+    )
+  ) %>% 
+  addLegend(
+    data = ces4_bay_joined_res,
+    pal = ces_residuals_pal,
+    values = ~Residuals,
+    title = "Residuals of log-transformed linear regression for<br>PM2.5 concentrations verson Asthma-related ED visits")
+```
+
+
+**Figure 7. The spatial distribution of residuals for the log best fit model by census tract.**
