@@ -18,13 +18,14 @@ library(mapview)
 library(tigris)
 library(readxl)
 library(survey)
+library(dplyr)
 
 Sys.setenv(CENSUS_KEY="cccdf64b447748daaddebe5f9aeaec92fc4b744c")
 ```
 
 #**PART 1:**
 
-In Figure 1 below, we see the Public use Microdata Areas (PUMAs) for San Francisco County, CA mapped. In this example, we can see some strange geographic anomalies in the borders for these PUMAs. First, when looking at North Beach and Chinatown PUMA in the Northeast portion of the city, we see that the shape also encompasses land are across the Bay in Alameda in the southwest corner of the airfield, as well as on Angel Island near Fort McDowell. When examining the OpenStreetMap layer in the leaflet map output, it becomes clear why these anomalies occur. Both shapes terminate on one end along the San Francisco County line, which to me indicates that the automated model that the Census Bureau used to generate their PUMA shapefiles clipped them at county lines. Because of the quirk of where the San Francisco County line terminates, this meant that small slivers of land area became attributed to what I suspect the Census Bureau would agree is the wrong PUMA. A third geographic anomaly can be seen as part of the Richmond District. Several miles out to see West of the Bay is the Southeast Farralon Island State Marine Conservation Area. As the OpenStreetMap layer shows, this area is jurisdictionally part of San Francisco City and County, and therefor became attributed within the PUMA of Northwest San Francisco County. Fortunately, all three of these anomalous areas are uninhabited; one is a park, one a decommissioned airfield, one a wildlife preserve. So for the purposes of analysis, they should not affect any outputs when investigating PUMS data. 
+In Figure 1 below, we see the Public Use Microdata Areas (PUMAs) for San Francisco County, CA mapped. In this example, we can see some strange geographic anomalies in the borders for these PUMAs. First, when looking at North Beach and Chinatown PUMA in the Northeast portion of the city, we see that the shape also encompasses land are across the Bay in Alameda in the southwest corner of the airfield, as well as on Angel Island near Fort McDowell. When examining the OpenStreetMap layer in the leaflet map output, it becomes clear why these anomalies occur. Both shapes terminate on one end along the San Francisco County line, which to me indicates that the automated model that the Census Bureau used to generate their PUMA shapefiles clipped them at county lines. Because of the quirk of where the San Francisco County line terminates, this meant that small slivers of land area became attributed to what I suspect the Census Bureau would agree is the wrong PUMA. A third geographic anomaly can be seen as part of the Richmond District. Several miles out to see West of the Bay is the Southeast Farralon Island State Marine Conservation Area. As the OpenStreetMap layer shows, this area is jurisdictionally part of San Francisco City and County, and therefor became attributed within the PUMA of Northwest San Francisco County. Fortunately, all three of these anomalous areas are uninhabited; one is a park, one a decommissioned airfield, one a wildlife preserve. So for the purposes of analysis, they should not affect any outputs when investigating PUMS data. 
 
 ```{r}
 pums_2019_1yr <- getCensus(
@@ -85,7 +86,7 @@ leaflet() %>%
 **Figure 1. A map of San Francisco County Public Use Microdata Areas (PUMAs)
 
 
-Below are the outputs of a generalized linnear model that is designed to predict the likelihood that a given house qualifies for a lead testing kit, which is defined as households that a) make less than $90,000 annually, b) have at least one child below the age of 6, and c) live in a home built prior to 1960. The parameters of the model are the type of building (units in structure), the tenure of the residents, when it was moved into, and the geography of the home (PUMA, see Figure 1). The model is designed to predict, based on these parameters, whether a house will qualify for a lead testing kit. Based on the summary of outputs below, we can see that five factors hold statistical significance in the prediction; two tenure factors and 3 geographic PUMAs. Based on this, I would consider looking more closely at geography as a predicting variable and potentially revise the model to more efficiently predict lead risk.
+Below are the outputs of a generalized linear model that is designed to predict the likelihood that a given house qualifies for a lead testing kit, which is defined as households that a) make less than $90,000 annually, b) have at least one child below the age of 6, and c) live in a home built prior to 1960. The parameters of the model are the type of building (units in structure), the tenure of the residents, when it was moved into, and the geography of the home (PUMA, see Figure 1). The model is designed to predict, based on these parameters, whether a house will qualify for a lead testing kit. Based on the summary of outputs below, we can see that five factors hold statistical significance in the prediction; two tenure factors and 3 geographic PUMAs. 
 
 ```{r}
 SF_pums <-
@@ -153,7 +154,7 @@ SF_pums_factor <- SF_pums_leadrisk %>%
 
 ```
 
-Summary output of the logit model with the factors of Building, Tenure, Move, and PUMA.
+Summary output of the logit model with the factors of Building, Tenure, Move, and PUMA:
 
 ```{r}
 SF_pums_logit <- glm(
@@ -166,7 +167,7 @@ summary(SF_pums_logit)
 ```
 
 
-Below is the predicted probability of a randomly selected row that a home has a household income below $90,000 per year _and_ has at least one child below the age of six (i.e. their "leadrisk" is TRUE.
+Below is the predicted probability of a randomly selected row that a home has a household income below $90,000 per year _and_ has at least one child below the age of six (i.e. their "leadrisk" is TRUE:
 
 ```{r}
 predict(SF_pums_logit, sample_n(SF_pums_factor,1), type = "response")
@@ -175,11 +176,11 @@ predict(SF_pums_logit, sample_n(SF_pums_factor,1), type = "response")
 #**PART 2:**
 
 
-Below see a 2x2 matrix representing True Positives, True Negatives, False Positives, and False Negatives. In the upper right and lower left, we can see the true positives and negatives, respectively. In the upper left and lower right, we see the Type II (False Negative) and Type I error (False Positive), respectively. In total __the model correctly predicted 97.3% of the outcomes, with 4 true positives and 2200 true negatives.__ The 4 homes that were true positives all had significant similarities. They were all single-family detached homes, they all rented, and they had all moved in to their homes within the past 9 years.
+Below we present a 2x2 matrix representing True Positives, True Negatives, False Positives, and False Negatives. In the upper right and lower left, we can see the true positives and negatives, respectively. In the upper left and lower right, we see the Type II (False Negative) and Type I error (False Positive), respectively. In total __the model correctly predicted 97.3% of the outcomes, with 4 true positives and 2200 true negatives.__ The 4 homes that were true positives all had significant similarities. They were all single-family detached homes, they all rented, and they had all moved in to their homes within the past 9 years.
 
-Interestingly, however, the model predicted over 5x more false positives (27) than true positives. Based on the prediction, this program would mail out 31 test kits per ~2200 homes (scaling up for the full population of San Francisco), however __only about 15% of mailed lead test kits would successfully reach qualifying households__ (4 true positives out of 26 true predictions). Meanwhile, the model predicted 33 homes as not receiving test kits, when in fact they do qualify. __Only about 10% of homes that do in fact qualify would actually receive a test kit, meaning only about 10% of at-risk children would be reached by a program following this model__ (4 true positives out of 37 true outcomes). The PUMS data is a representative sample of approximately 10% of the population, therefore we must make some assumptions that the true quantity of all of our categories is simple 10x greater than the values presented in this analysis. Therefore, _the model would suggest that we should mail out 310 test kits ((4 + 27)* 10), and we should expect 40 of them to successfully reach at-risk homes._ This would leave 330 at-risk homes that would not receive a test kit, and _about 90% of at-risk would be left out of the program._
+Interestingly, however, the model predicted over 6x more false positives (27) than true positives. Based on the prediction, this program would mail out 31 test kits per ~2200 homes (scaling up for the full population of San Francisco), however __only about 13% of mailed lead test kits would successfully reach qualifying households__ (4 true positives out of 31 true predictions). Meanwhile, the model predicted 33 homes as not receiving test kits, when in fact they do qualify. __Only about 10% of homes that do in fact qualify would actually receive a test kit, meaning only about 10% of at-risk children would be reached by a program following this model__ (4 true positives out of 37 true outcomes). The PUMS data is a representative sample of approximately 10% of the population, therefore we must make some assumptions that the true quantity of all of our categories is simple 10x greater than the values presented in this analysis. Therefore, _the model would suggest that we should mail out 310 test kits ((4 + 27)* 10), and we should expect 40 of them to successfully reach at-risk homes._ This would leave 330 at-risk homes that would not receive a test kit, and _about 90% of at-risk would be left out of the program._
 
-This model clearly lacks strong predictive capacity in terms of finding true positives, however it does rule out true negatives very effectively. The biggest issue, I believe, in the development of this model is that it targets a very small sub population based on variable factors that, by nature of the PUMS data, are only broken down into relatively large buckets (BLD, TEN, MV). Improving this model is challenging given the lack of immediately relevant information at the address level (income and children). The first thing that I would do is attempt to refine the model based on the factors that actually provided statistical significance, Tenure and PUMA geography. All other factors did not have significance in the model, and most had Pr(>|t|) values that were near-1. Therefore, we can reason that the majority of the model doesn't actually predict significantly.  Once the model was improved, I would use it to target local school districts that may contain higher proportions of at-risk families and work with them on more targeted distribution. Similarly to our discussion on how to most effectively distribute CalEnviroScreen funding, I believe that having local knowledge and on-the-ground collaboration is a critical piece in successfully distributing this kind of a resource. The school district may or may not have access to children counts (though I suspect they do) or income, however they will have a much greater understanding of which addresses have those specific risk factors than this model does, relying solely on other variables. 
+This model clearly lacks strong predictive capacity in terms of finding true positives, however it does rule out true negatives very effectively. The biggest issue, I believe, in the development of this model is that it targets a very small sub population based on variable factors that, by nature of the PUMS data, are only broken down into relatively large buckets (BLD, TEN, MV). Improving this model is challenging given the lack of immediately relevant information at the address level (income and children). The first thing that I would do is attempt to refine the model based on the factors that actually provided statistical significance; Tenure and PUMA geography. All other factors did not have significance in the model, and most had Pr(>|t|) values that were near-1. Therefore, we can reason that the majority of the model parameters do not actually predict significantly.  Once the model was improved, I would use it to target local school districts that may contain higher proportions of at-risk families and work with them on more targeted distribution, allowing the school staff to determine what local families or communities were more likely to be at-risk. Similarly to our discussion on how to most effectively distribute CalEnviroScreen funding, I believe that having local knowledge and on-the-ground collaboration is a critical piece in successfully distributing this kind of a resource. The school district may or may not have access to children counts (though I suspect they do) or income, however they will have a much greater understanding of which addresses have those specific risk factors than this rough model does, relying solely on other variables. 
 
 ```{r}
 Full_predict <- predict(SF_pums_logit, SF_pums_factor, type = "response")
@@ -205,5 +206,30 @@ summary_2x2
 #Bottom Left = True Negative
 #Top Left = False Positive
 #Bottom Right = False Negative
+```
+
+#**Part 3**
+
+In the .rmd file, you'll see my commented-out attempt at part 3. I intend to return to part 3, but it would be helpful if, in the next R lab, we could go over in class 1) how to incorporate replicate weights, and 2) what exactly the significance of the weights is. I was a little confused by the textbook explanation 
+
+```{r}
+# weights_1_80 <- read.csv("psam_h06.csv")
+# weights_1_80 %>% select('SERIALNO', starts_with('WGTP')) %>%
+#   select(-WGTP)
+```
+
+```{r}
+# SF_pums_weighted <- left_join(SF_pums_logit_predicted,weights_1_80, by = 'SERIALNO')
+# SF_pums_clean_weights <- SF_pums_weighted %>%
+#   select('SERIALNO','BLD.x','MV.x','leadrisk','TEN.x','PUMA.x', starts_with('WGTP')) %>%
+#   select(-WGTP)
+```
+```{r}
+# logit_weighted <- svrepdesign(
+#   data = SF_pums_logit_predicted,
+#   type = "ACS",
+#   repweights = SF_pums_clean_weights,
+#   weights = ~as.numeric('WGTP')
+# )
 ```
 
