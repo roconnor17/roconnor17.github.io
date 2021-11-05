@@ -44,7 +44,8 @@ pums_2019_1yr <- getCensus(
     "HINCP",
     "TEN",
     "AGEP",
-    "HUPAC"
+    "HUPAC",
+    "PUMA"
   )
 )
 
@@ -178,7 +179,7 @@ predict(SF_pums_logit, sample_n(SF_pums_factor,1), type = "response")
 
 Below we present a 2x2 matrix representing True Positives, True Negatives, False Positives, and False Negatives. In the upper right and lower left, we can see the true positives and negatives, respectively. In the upper left and lower right, we see the Type II (False Negative) and Type I error (False Positive), respectively. In total __the model correctly predicted 97.3% of the outcomes, with 4 true positives and 2200 true negatives.__ The 4 homes that were true positives all had significant similarities. They were all single-family detached homes, they all rented, and they had all moved in to their homes within the past 9 years.
 
-Interestingly, however, the model predicted over 6x more false positives (27) than true positives. Based on the prediction, this program would mail out 31 test kits per ~2200 homes (scaling up for the full population of San Francisco), however __only about 13% of mailed lead test kits would successfully reach qualifying households__ (4 true positives out of 31 true predictions). Meanwhile, the model predicted 33 homes as not receiving test kits, when in fact they do qualify. __Only about 10% of homes that do in fact qualify would actually receive a test kit, meaning only about 10% of at-risk children would be reached by a program following this model__ (4 true positives out of 37 true outcomes). The PUMS data is a representative sample of approximately 10% of the population, therefore we must make some assumptions that the true quantity of all of our categories is simple 10x greater than the values presented in this analysis. Therefore, _the model would suggest that we should mail out 310 test kits ((4 + 27)* 10), and we should expect 40 of them to successfully reach at-risk homes._ This would leave 330 at-risk homes that would not receive a test kit, and _about 90% of at-risk would be left out of the program._
+Interestingly, however, the model predicted over 6x more false positives (27) than true positives. Based on the prediction, this program would mail out 31 test kits per ~2200 homes (scaling up for the full population of San Francisco), however __only about 13% of mailed lead test kits would successfully reach qualifying households__ (4 true positives out of 31 true predictions). Meanwhile, the model predicted 33 homes as not receiving test kits, when in fact they do qualify. __Only about 10% of homes that do in fact qualify would actually receive a test kit, meaning only about 10% of at-risk children would be reached by a program following this model__ (4 true positives out of 37 true outcomes). Although this analysis does not account for replicate weights, we may still make assumptions for scaling up to the full populations, though they may hold limited statistical relevance. The PUMS data is a representative sample of approximately 10% of the population, therefore we must make some assumptions that the true quantity of all of our categories is simple 10x greater than the values presented in this analysis. Therefore, _the model would suggest that we should mail out 310 test kits ((4 + 27)* 10), and we should expect 40 of them to successfully reach at-risk homes._ This would leave 330 at-risk homes that would not receive a test kit, and _about 90% of at-risk would be left out of the program._
 
 This model clearly lacks strong predictive capacity in terms of finding true positives, however it does rule out true negatives very effectively. The biggest issue, I believe, in the development of this model is that it targets a very small sub population based on variable factors that, by nature of the PUMS data, are only broken down into relatively large buckets (BLD, TEN, MV). Improving this model is challenging given the lack of immediately relevant information at the address level (income and children). The first thing that I would do is attempt to refine the model based on the factors that actually provided statistical significance; Tenure and PUMA geography. All other factors did not have significance in the model, and most had Pr(>|t|) values that were near-1. Therefore, we can reason that the majority of the model parameters do not actually predict significantly.  Once the model was improved, I would use it to target local school districts that may contain higher proportions of at-risk families and work with them on more targeted distribution, allowing the school staff to determine what local families or communities were more likely to be at-risk. Similarly to our discussion on how to most effectively distribute CalEnviroScreen funding, I believe that having local knowledge and on-the-ground collaboration is a critical piece in successfully distributing this kind of a resource. The school district may or may not have access to children counts (though I suspect they do) or income, however they will have a much greater understanding of which addresses have those specific risk factors than this rough model does, relying solely on other variables. 
 
@@ -210,26 +211,78 @@ summary_2x2
 
 #**Part 3**
 
-In the .rmd file, you'll see my commented-out attempt at part 3. I intend to return to part 3, but it would be helpful if, in the next R lab, we could go over in class 1) how to incorporate replicate weights, and 2) what exactly the significance of the weights is. I was a little confused by the textbook explanation 
+Below, the steps from the second half of Part 1 (model summary output) and Part 2 (2x2 matrix of predictions and errors) are repeated for the data set with replicate weights applied
+
+We repeat the analysis for the 2x2 matrix representing True Positives, True Negatives, False Positives, and False Negatives. In the upper right and lower left, we can see the true positives and negatives, respectively. With the replicate weights accounted for, __the model correctly predicted 98.1% of the outcomes, with 2 true positives and 2220 true negatives.__ This represents a slight increase in overall success as compared to the un-weighted model, which we will see below is mostly accounted for in the reduction of false positive errors. 
+
+Based on the weighted prediction, this program would mail out 9 test kits per ~2200 homes (scaling up for the full population of San Francisco), however __only about 22% of mailed lead test kits would successfully reach qualifying households__ (4 true positives out of 31 true predictions). This is an increase over the 13% that would successfully reach homes in the un-weighted model. Meanwhile, the model predicted 35 homes as not receiving test kits, when in fact they do qualify. In this case, __only about 5.4% of homes that do in fact qualify would actually receive a test kit, meaning only about 5.4% of at-risk children would be reached by a program following this model__ (2 true positives out of 37 true outcomes). Now that replicate weights are accounted for, a more appropriate scale up to the full population can be conducted, assuming that the sample is 10% of the full poopulation. _The model would suggest that we should mail out 90 test kits ((2+7)* 10), and we should expect 20 of them to successfully reach at-risk homes._ This would leave 70 at-risk homes that would not receive a test kit, and _about 68% of at-risk would be left out of the program._ While this result is more efficient in terms of the number of kits sent out, it remains a rough model, lacking predictive capacity to adequately cover the at-risk population. 
 
 ```{r}
-# weights_1_80 <- read.csv("psam_h06.csv")
-# weights_1_80 %>% select('SERIALNO', starts_with('WGTP')) %>%
-#   select(-WGTP)
+pums_hca_2019_1yr <- read_csv("psam_h06.csv")
+
+weights <- pums_hca_2019_1yr %>%
+  filter(PUMA %in% SF_PUMA$PUMACE10) %>%
+  select(
+    SERIALNO,
+    starts_with("WGTP")
+  )
+weighted_leadrisk <- left_join(
+  weights,
+  SF_pums_leadrisk,
+  by = "SERIALNO"
+) %>%
+  filter_all(
+    all_vars(!is.na(.))
+  ) %>%
+  mutate(
+    leadrisk = as.numeric(leadrisk),
+    BLD = factor(BLD),
+    TEN = factor(TEN),
+    MV = factor(MV),
+    PUMA = factor(PUMA)
+  )
+  
+design <- svrepdesign(
+  data = weighted_leadrisk,
+  type = "ACS",
+  repweights = weighted_leadrisk[ ,3:82],
+  weights = ~as.numeric(WGTP)
+)
+
+weighted_model <- svyglm(
+  leadrisk ~ BLD + TEN + MV + PUMA,
+  family = gaussian(),
+  design = design
+)
+summary(weighted_model)
 ```
 
 ```{r}
-# SF_pums_weighted <- left_join(SF_pums_logit_predicted,weights_1_80, by = 'SERIALNO')
-# SF_pums_clean_weights <- SF_pums_weighted %>%
-#   select('SERIALNO','BLD.x','MV.x','leadrisk','TEN.x','PUMA.x', starts_with('WGTP')) %>%
-#   select(-WGTP)
-```
-```{r}
-# logit_weighted <- svrepdesign(
-#   data = SF_pums_logit_predicted,
-#   type = "ACS",
-#   repweights = SF_pums_clean_weights,
-#   weights = ~as.numeric('WGTP')
-# )
+predict(weighted_model, sample_n(weighted_leadrisk,1), type = "response")
 ```
 
+```{r}
+Weights_predict <- predict(weighted_model, weighted_leadrisk, type = "response")
+
+Weighted_predicted <- cbind(weighted_leadrisk, Weights_predict)
+```
+
+```{r}
+summary_2x2_weighted <-
+  Weighted_predicted %>% 
+  mutate(
+    leadrisk = ifelse(
+      leadrisk == 1, 
+      "Lead Risk", 
+      "No Lead Risk"
+    )
+  ) %>% 
+  pull(leadrisk) %>% 
+  table(Weights_predict >= 0.1)
+
+summary_2x2_weighted
+#Top Right = True Positive
+#Bottom Left = True Negative
+#Top Left = False Positive
+#Bottom Right = False Negative
+```
