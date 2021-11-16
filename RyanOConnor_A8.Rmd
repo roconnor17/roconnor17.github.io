@@ -1,0 +1,246 @@
+---
+title: "Assignment 8"
+author: "RyanOConnor"
+date: "11/12/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+```
+
+```{r}
+library(tigris)
+library(tidyverse)
+library(tidycensus)
+library(sf)
+library(censusapi)
+library(leaflet)
+library(StatMatch)
+library(dplyr)
+
+Sys.setenv(CENSUS_KEY="cccdf64b447748daaddebe5f9aeaec92fc4b744c")
+```
+
+```{r}
+pums_2014_2019 <- readRDS("pums_2014_2019_wts.rds")
+```
+
+```{r}
+ca_pumas <-
+  pumas("CA", cb = T, progress_bar = F)
+
+bay_county_names <-
+  c(
+    "Alameda",
+    "Contra Costa",
+    "Marin",
+    "Napa",
+    "San Francisco",
+    "San Mateo",
+    "Santa Clara",
+    "Solano",
+    "Sonoma"
+  )
+
+bay_counties <-
+  counties("CA", cb = T, progress_bar = F) %>%
+  filter(NAME %in% bay_county_names)
+
+bay_pumas <-
+  ca_pumas %>% 
+  st_centroid() %>% 
+  .[bay_counties, ] %>% 
+  st_drop_geometry() %>% 
+  left_join(ca_pumas %>% select(GEOID10)) %>% 
+  st_as_sf()
+```
+
+```{r}
+leaflet() %>% 
+  addProviderTiles(providers$CartoDB.Positron) %>% 
+  addPolygons(
+    data = bay_pumas,
+    weight = 1,
+    color = "gray",
+    label = ~PUMACE10
+  ) %>% 
+  addMarkers(
+    lng = -121.78040700949629,
+    lat = 37.9954318565545
+  ) %>% 
+  addPolygons(
+    data = bay_pumas %>% 
+      filter(PUMACE10 == "01309")
+  )
+```
+
+Figure 1. The Bay Area, with a marker identifying the Antioc BART station and a highlighted polygon identifying the PUMA encompassing the towns of Oakley and Brentwood (01309)
+
+
+
+
+
+```{r}
+pums_bart <- pums_2014_2019 %>%
+  mutate(
+    PWGTP = as.numeric(PWGTP),
+    bart = ifelse(
+      JWTR %in% c("4"),
+      PWGTP,
+      0
+    )
+  ) %>% 
+  group_by(PUMA, year) %>% 
+  summarize(
+    pop = sum(PWGTP),
+    bart = sum(bart)
+  )
+
+pums_bart_clean <-
+  pums_bart %>% 
+  select(-pop) %>% 
+  pivot_wider(
+    names_from = year,
+    values_from = bart
+  )
+```
+
+```{r}
+obs_matrix <-
+  pums_bart_clean %>% 
+  ungroup() %>% 
+  select(`2014`,`2015`,`2016`,`2017`) %>% 
+  as.matrix()
+
+dist_matrix <- mahalanobis.dist(obs_matrix)
+
+rownames(dist_matrix) <- pums_bart_clean$PUMA
+colnames(dist_matrix) <- pums_bart_clean$PUMA
+
+match <- dist_matrix["01309",] %>% 
+  as.data.frame() %>% 
+  rownames_to_column() %>% 
+  rename(
+    PUMA = rowname,
+    match = "."
+  ) %>% 
+  right_join(
+    pums_bart_clean
+  ) %>% 
+  arrange(match) %>% 
+  .[1:11, ] %>% 
+  left_join(bay_pumas %>% select(PUMA = PUMACE10)) %>% 
+  st_as_sf()
+```
+
+```{r}
+leaflet() %>% 
+  addTiles() %>% 
+  addProviderTiles(providers$CartoDB.Positron) %>% 
+  addPolygons(
+    data = match[1, ],
+    color = "red",
+    label = ~PUMA
+  ) %>% 
+  addPolygons(
+    data = match[-1, ],
+    label = ~PUMA
+  )
+```
+
+Figure 2. The PUMA geographies most similar (blue) to PUMA 01309 (red) with regard to BART ridership prior to the addition of the Antioch BART station in 2018.
+
+
+
+
+
+```{r}
+match_pumas <-
+  match %>% 
+  filter(!PUMA %in% c("01309")) %>% 
+  st_drop_geometry() %>% 
+  select(-match) %>% 
+  pivot_longer(
+    -PUMA,
+    names_to = "year",
+    values_to = "bart"
+  ) %>%
+  group_by(
+    year
+  ) %>% 
+  summarize(
+    bart = mean(bart),
+    PUMA = "Similar PUMAs"
+  )
+
+treatment_pumas <-
+  match %>% 
+  filter(PUMA %in% c("01309")) %>% 
+  select(-match) %>% 
+  st_drop_geometry() %>% 
+  pivot_longer(
+    -PUMA,
+    names_to = "year",
+    values_to = "bart"
+  )
+
+rbind(
+  treatment_pumas,
+  match_pumas
+) %>% 
+  ggplot(
+    aes(
+      x = as.numeric(year),
+      y = bart,
+      color = PUMA
+    )
+  ) +
+  geom_line() +
+  geom_vline(xintercept = 2018, linetype = "dashed") +
+  labs(
+    title = "Brentwood/Oakville vs. control neighborhoods, BART ridership",
+    x = "Year",
+    y = "BART commute riders"
+  )
+```
+
+Figure 3. The time-series chart of BART ridership in PUMA 01309 (red), as compared to the average BART ridership across the similar PUMAs (blue) identified in Figure 2. The dotted line represents the addition of the Antioch BART station, located near PUMA 01309
+
+
+
+Summary output of the Difference-In-Difference model:
+```{r}
+transit_did <-
+  match %>% 
+  st_drop_geometry() %>% 
+  select(-match) %>% 
+  pivot_longer(
+    -PUMA,
+    names_to = "year",
+    values_to = "bart"
+  ) %>% 
+  mutate(
+    year = year %>% as.numeric(),
+    time = ifelse(year >= 2018, 1, 0),
+    treated = ifelse(PUMA == "01309", 1, 0)
+  )
+
+did_reg <- lm(bart ~ treated*time, data = transit_did)
+
+summary(did_reg)
+```
+
+
+#**Analysis: PART 1 -- DiD Analysis:**
+
+In the above analysis, a Difference-In-Difference regression is performed in order to discern the effect of the addition of the Antioch Bay Area Rapid Transit (BART) station at 1600 Slatten Ranch Rd in Antioch, CA. The station was opened on May 26, 2018 and services the yellow line, providing transit to the Northern and Eastern portions of Contra Costa County. In order to analyze the effect of this station opening on BART ridership in the immediate vicinity, we identified a Public Use Microdata Area (PUMA) that was "upstream" of the previously existing transit infrastructure, essentially meaning that it was on the outside of the BART network. The PUMA identified for analysis was #01309, which encompasses the towns of Oakley, CA and Brentwood, CA, and is directly East of the Antioch station (though notably does not directly contain the Antioch station, which is immediately adjacent to this PUMA) (Fig. 1). PUMA #01309 was matched with 10 PUMAs that experienced similar ridership rates prior to the opening of the Antioch BART station (Fig. 2). Using a Difference-In-Difference model, the average ridership across these 10 PUMAs was compared to the ridership in PUMA #01309 before (2014-2017) and after (2018-2019) the station's opening. In Figure 3, we can clearly see a visual difference between the two groups in the years following 2017, indicating that the treatment of a new BART station likely had a significant effect on ridership in the adjacent geography. **This indication is supported by the above model summary output, specifically in the "treated:time" line, which shows an estimate Difference-In-Difference of 1097 new commuters that is highly significant (p<0.001). The model essentially concludes that there are nearly 1100 more commuters utilizing BART in the Oakley and Brentwood areas due to the opening of the Antioch BART station in May of 2018 that otherwise would not have commuted with BART.**
+
+
+
+#**Analysis: PART 2 -- Assumptions and Comparison to Textbook Example:**
+
+This analysis makes some significant assumptions, most notably in that **we must trust the results of the American Communities Survey as being reflective of BART ridership.** Notably, the response represented here is "Subway or Elevated Car" as a means of commuting. BART is not exactly either of these, which could lead to confusion on the part of the respondents. Additionally, **the PUMA that we are analyzing, while a reasonable comparison given that it is "downstream" of Antioch, does not actually contain the treatment of a new BART station.** We are making an assumption that the Antioch station increased access uniformly across the PUMA, however this is likely not true in a practical sense. You can see in Fig. 1 that the geography of the PUMA extends far East, North, and South of the treatment station, and it's likely that much of the PUMA's area was only marginally affected in their ability to access BART following the treatment. We are also assuming **that none of the comparison PUMAs experienced the opening of a new BART station during the treatment period (see comparison with textbook example below for the risk of this assumption).** Additionally, we are assuming that **access to BART is the only thing that could drive increased ridership.** However, it is conceivable that another socioeconomic driver may have increased ridership. We also assume that the __PUMS data is successfully representative of the full population,__ even though it is in fact a sample of 10% of the population, and could therefore fail to represent the entire community for either the treatment or control groups. For example, an increase in population within the PUMA could produce a similar effect, though it is unlikely to have occurred so acutely. **_In the end, what we know about BART station access and what the model indicates about the treatment and the time difference in ridership does suggest that the opening of the Antioch station significantly affected BART ridership in the treatment PUMA, however it is important to understand how many assumptions this conclusion is built upon._**
+
+As compared to the textbook example, which examines the Milpitas BART station's opening in 2017, we see significantly greater statistical significance from the Antioch BART opening. Interestingly, in the textbook example immediately following the opening of the station, we see a similar spike in ridership in Milpitas as compared to the control PUMAs. However, the controls quickly recover and begin to converge with the Milpitas PUMA, which I suspect is what drives down the statistical significance in the model. Looking only at the treatment, it does appear as though the station opening drove a significant increase in ridership. Further analysis could and should examine what drove the increase in the control PUMAs. It is possible that ridership across the entire study group (control and treatment) increased, agnostic of the opening of new stations. However, it is also possible that one of the control group PUMAs also experienced an opening of a BART station after 2017. _**In fact, upon further examination, one of the control PUMAs in the textbook example was PUMA #01309, which is the treatment PUMA examined in our above analysis.**_ So in 2018, the textbook example's control group essentially received the same treatment as the treatment group, which skewed the analysis and likely accounts for the lagged increase in control group ridership. This underscores the importance of understanding the full picture of what is happening in the control groups of any analysis and the risk of assuming that a matched selection is automatically appropriate for this sort of analysis. Interestingly, we also see a small spike upwards in BART commuter ridership in 2019 among the control PUMAs. It is possible that the same confounding effect has been captured here, or it is also possible that ridership increased due to other factors. A further analysis of the 10 control PUMAs and their surrounding geographies would be required to understand this trend, and further analysis for 2020 and 2021 would be required to understand if the trend is more than a single-year anomaly. 
+
